@@ -1,0 +1,2840 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flagship Truth or Dare - Ultimate Edition</title>
+
+    <!-- PWA & Mobile Meta -->
+    <meta name="theme-color" content="#121212" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="T or D" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="manifest" href="manifest.json" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <script
+      crossorigin
+      src="https://unpkg.com/react@18/umd/react.development.js"
+    ></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+    ></script>
+
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              "luxury-gold": "#D4AF37",
+              skin: {
+                base: "var(--bg-color)",
+                card: "var(--card-bg)",
+                text: "var(--text-primary)",
+                muted: "var(--text-muted)",
+                accent: "var(--accent-color)",
+                border: "var(--border-color)",
+              },
+            },
+            fontFamily: {
+              sans: ["Inter", "system-ui", "sans-serif"],
+              serif: ["Playfair Display", "serif"],
+            },
+            animation: {
+              "fade-in": "fadeIn 0.2s ease-out",
+              "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+            },
+            keyframes: {
+              fadeIn: {
+                "0%": { opacity: "0", transform: "translateY(-10px)" },
+                "100%": { opacity: "1", transform: "translateY(0)" },
+              },
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      /* 貴族風 (預設) - 質感黑金 */
+      :root {
+        --bg-color: #121212;
+        --card-bg: #1e1e1e;
+        --text-primary: #e5e5e5;
+        --text-muted: #666666;
+        --accent-color: #d4af37;
+        --border-color: #333333;
+      }
+
+      /* 派對風 - 活力淺色 */
+      .theme-party {
+        --bg-color: #f0f2f5;
+        --card-bg: #ffffff;
+        --text-primary: #2d3748;
+        --text-muted: #a0aec0;
+        --accent-color: #845ec2;
+        --border-color: #e2e8f0;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-primary);
+        transition: background-color 0.5s ease, color 0.5s ease;
+      }
+
+      /* 自定義滾動條 */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: var(--text-muted);
+        border-radius: 20px;
+      }
+
+      /* 3D 翻轉工具 */
+      .perspective-1000 {
+        perspective: 1000px;
+      }
+      .transform-style-3d {
+        transform-style: preserve-3d;
+      }
+      .backface-hidden {
+        backface-visibility: hidden;
+      }
+      .rotate-y-180 {
+        transform: rotateY(180deg);
+      }
+
+      .mask-fade-sides {
+        mask-image: linear-gradient(
+          to right,
+          transparent,
+          black 15%,
+          black 85%,
+          transparent
+        );
+        -webkit-mask-image: linear-gradient(
+          to right,
+          transparent,
+          black 15%,
+          black 85%,
+          transparent
+        );
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      // PWA Service Worker Registration
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./service-worker.js")
+            .then((registration) => {
+              console.log(
+                "ServiceWorker registration successful with scope: ",
+                registration.scope
+              );
+            })
+            .catch((err) => {
+              console.log("ServiceWorker registration failed: ", err);
+            });
+        });
+      }
+
+      const { useState, useEffect } = React;
+
+      // === 資料庫 (Data) ===
+      const defaultGameData = {
+        普通朋友: {
+          // Casual (Level 1-3) - 適合破冰、一般聚會
+          truth: [
+            {
+              id: "ca_t_01",
+              text: "如果能擁有一項超能力，你會選什麼？",
+              level: 1,
+            },
+            {
+              id: "ca_t_02",
+              text: "你最喜歡的電影是哪一部？為什麼？",
+              level: 1,
+            },
+            {
+              id: "ca_t_03",
+              text: "如果中了一億元，你第一件事會做什麼？",
+              level: 1,
+            },
+            { id: "ca_t_04", text: "你小時候的夢想職業是什麼？", level: 1 },
+            { id: "ca_t_05", text: "分享一件你最近發生的糗事。", level: 2 },
+            { id: "ca_t_06", text: "在場的人之中，你覺得誰最有趣？", level: 2 },
+            { id: "ca_t_07", text: "你最害怕的一種動物是什麼？", level: 1 },
+            {
+              id: "ca_t_08",
+              text: "如果可以和世界上任何人共進晚餐，你會選誰？",
+              level: 1,
+            },
+            {
+              id: "ca_t_09",
+              text: "你人生中做過最勇敢的事情是什麼？",
+              level: 2,
+            },
+            { id: "ca_t_10", text: "你有什麼奇怪的癖好嗎？", level: 2 },
+            { id: "ca_t_11", text: "你最近一次哭是因為什麼？", level: 2 },
+            {
+              id: "ca_t_12",
+              text: "如果明天是世界末日，你會怎麼度過？",
+              level: 2,
+            },
+            { id: "ca_t_13", text: "你最討厭的一種食物是什麼？", level: 1 },
+            { id: "ca_t_14", text: "分享一個你童年的秘密基地。", level: 1 },
+            {
+              id: "ca_t_15",
+              text: "你曾經對朋友說過最大的謊是什麼？",
+              level: 3,
+            },
+            {
+              id: "ca_t_16",
+              text: "如果必須在場選一個人去荒島，你會選誰？",
+              level: 2,
+            },
+            { id: "ca_t_17", text: "你最想去哪個國家旅遊？", level: 1 },
+            { id: "ca_t_18", text: "你覺得自己最大的優點是什麼？", level: 1 },
+            { id: "ca_t_19", text: "你上一次生氣是因為什麼？", level: 2 },
+            {
+              id: "ca_t_20",
+              text: "如果可以回到過去，你最想改變哪一件事？",
+              level: 2,
+            },
+            { id: "ca_t_21", text: "你最喜歡的一首歌是什麼？", level: 1 },
+            { id: "ca_t_22", text: "你相信有外星人嗎？", level: 1 },
+            { id: "ca_t_23", text: "你最想學會哪種語言？", level: 1 },
+            {
+              id: "ca_t_24",
+              text: "你睡覺前最後一件事通常是做什麼？",
+              level: 1,
+            },
+            { id: "ca_t_25", text: "你覺得自己像哪種動物？", level: 1 },
+            { id: "ca_t_26", text: "你最喜歡的季節是？為什麼？", level: 1 },
+            { id: "ca_t_27", text: "你曾經在公共場合跌倒過嗎？", level: 2 },
+            { id: "ca_t_28", text: "你最喜歡的節日是哪一個？", level: 1 },
+            { id: "ca_t_29", text: "你覺得錢能買到快樂嗎？", level: 2 },
+            { id: "ca_t_30", text: "你最想嘗試的極限運動是什麼？", level: 1 },
+            { id: "ca_t_31", text: "你曾經為了逃避做某事而裝病嗎？", level: 2 },
+            { id: "ca_t_32", text: "你最喜歡的冰淇淋口味？", level: 1 },
+            { id: "ca_t_33", text: "你覺得男女之間有純友誼嗎？", level: 2 },
+            { id: "ca_t_34", text: "你最近看的一本書是什麼？", level: 1 },
+            { id: "ca_t_35", text: "你曾經在電梯裡放屁嗎？", level: 2 },
+            { id: "ca_t_36", text: "你最喜歡自己身體的哪個部位？", level: 2 },
+            { id: "ca_t_37", text: "如果可以隱形一天，你會做什麼？", level: 2 },
+            { id: "ca_t_38", text: "你曾經網戀過嗎？", level: 2 },
+            { id: "ca_t_39", text: "你覺得自己是樂觀還是悲觀的人？", level: 1 },
+            { id: "ca_t_40", text: "你最害怕失去什麼？", level: 2 },
+            { id: "ca_t_41", text: "你曾經偷拿過別人的東西嗎？", level: 3 },
+            { id: "ca_t_42", text: "你覺得自己會是個好父母嗎？", level: 2 },
+            { id: "ca_t_43", text: "你最想見到的已故名人是誰？", level: 1 },
+            { id: "ca_t_44", text: "你曾經被狗追過嗎？", level: 1 },
+            { id: "ca_t_45", text: "你最喜歡的YouTuber是誰？", level: 1 },
+            { id: "ca_t_46", text: "你曾經在考試中作弊嗎？", level: 2 },
+            { id: "ca_t_47", text: "你覺得什麼樣的異性最吸引你？", level: 2 },
+            { id: "ca_t_48", text: "你曾經因為看電影而哭嗎？", level: 1 },
+            { id: "ca_t_49", text: "你最想住在城市還是鄉下？", level: 1 },
+            { id: "ca_t_50", text: "分享一個你最近的小確幸。", level: 1 },
+          ],
+          dare: [
+            {
+              id: "ca_d_01",
+              text: "模仿一種動物的叫聲，持續 10 秒。",
+              level: 1,
+            },
+            { id: "ca_d_02", text: "做 10 個伏地挺身。", level: 2 },
+            { id: "ca_d_03", text: "讓坐在你右邊的人幫你整理頭髮。", level: 1 },
+            {
+              id: "ca_d_04",
+              text: "用屁股寫字，讓大家猜你在寫什麼。",
+              level: 2,
+            },
+            {
+              id: "ca_d_05",
+              text: "對窗外大喊：「我是超級大帥哥/美女！」。",
+              level: 2,
+            },
+            { id: "ca_d_06", text: "模仿在場某個人的說話方式。", level: 2 },
+            { id: "ca_d_07", text: "閉著眼睛畫一隻豬。", level: 1 },
+            {
+              id: "ca_d_08",
+              text: "讓大家看你手機裡最近的一張照片。",
+              level: 2,
+            },
+            { id: "ca_d_09", text: "用奇怪的口音說話直到下一回合。", level: 2 },
+            { id: "ca_d_10", text: "聞坐在你左邊的人的襪子。", level: 3 },
+            { id: "ca_d_11", text: "表演一段空氣吉他獨奏。", level: 1 },
+            { id: "ca_d_12", text: "讓在場每個人摸一下你的頭。", level: 1 },
+            { id: "ca_d_13", text: "學貓叫三聲，要很撒嬌的那種。", level: 2 },
+            {
+              id: "ca_d_14",
+              text: "用你的鼻子觸碰你的舌頭（如果做不到就做鬼臉）。",
+              level: 1,
+            },
+            {
+              id: "ca_d_15",
+              text: "隨機撥打通訊錄的一個人說「祝你今天愉快」。",
+              level: 3,
+            },
+            { id: "ca_d_16", text: "模仿名模走台步繞場一周。", level: 2 },
+            { id: "ca_d_17", text: "保持笑容持續一分鐘。", level: 1 },
+            { id: "ca_d_18", text: "背一位玩家繞場一圈。", level: 3 },
+            {
+              id: "ca_d_19",
+              text: "用左手（非慣用手）寫下自己的名字。",
+              level: 1,
+            },
+            { id: "ca_d_20", text: "自拍一張最醜的鬼臉照並展示。", level: 2 },
+            { id: "ca_d_21", text: "鬥雞眼持續 10 秒。", level: 1 },
+            { id: "ca_d_22", text: "模仿一種樂器的聲音。", level: 1 },
+            {
+              id: "ca_d_23",
+              text: "讓右邊的人幫你塗口紅（或畫鬍子）。",
+              level: 2,
+            },
+            { id: "ca_d_24", text: "用慢動作做所有事情持續一回合。", level: 2 },
+            { id: "ca_d_25", text: "對著牆壁深情告白 30 秒。", level: 2 },
+            { id: "ca_d_26", text: "把鞋子脫掉直到下一回合。", level: 1 },
+            { id: "ca_d_27", text: "模仿猴子抓癢的動作。", level: 1 },
+            { id: "ca_d_28", text: "讓大家看你錢包裡有多少錢。", level: 2 },
+            { id: "ca_d_29", text: "用膝蓋夾著一張紙走一圈。", level: 2 },
+            { id: "ca_d_30", text: "模仿殭屍跳。", level: 1 },
+            { id: "ca_d_31", text: "讓左邊的人搔你癢 10 秒不能笑。", level: 2 },
+            { id: "ca_d_32", text: "用RAP的方式自我介紹。", level: 2 },
+            { id: "ca_d_33", text: "把頭髮弄成最亂的樣子。", level: 1 },
+            { id: "ca_d_34", text: "模仿一位政治人物。", level: 2 },
+            { id: "ca_d_35", text: "用屁股撞坐在你兩邊的人。", level: 2 },
+            { id: "ca_d_36", text: "含著水唱一首歌。", level: 3 },
+            { id: "ca_d_37", text: "讓大家看你手機的螢幕使用時間。", level: 2 },
+            { id: "ca_d_38", text: "模仿嬰兒哭聲。", level: 1 },
+            { id: "ca_d_39", text: "做 5 個深蹲。", level: 1 },
+            { id: "ca_d_40", text: "用手肘打字傳訊息給一個人。", level: 2 },
+            { id: "ca_d_41", text: "聞自己的腋下。", level: 2 },
+            { id: "ca_d_42", text: "模仿雞走路繞場一圈。", level: 1 },
+            {
+              id: "ca_d_43",
+              text: "讓右邊的人在你額頭上貼一張便利貼。",
+              level: 1,
+            },
+            { id: "ca_d_44", text: "用歌劇的方式說話持續一回合。", level: 2 },
+            { id: "ca_d_45", text: "假裝自己在騎馬。", level: 1 },
+            {
+              id: "ca_d_46",
+              text: "對著鏡頭（或鏡子）擺出三個性感姿勢。",
+              level: 2,
+            },
+            { id: "ca_d_47", text: "讓大家檢查你的包包。", level: 3 },
+            { id: "ca_d_48", text: "模仿魚嘴巴開合 10 次。", level: 1 },
+            { id: "ca_d_49", text: "用頭頂著一個杯子持續一回合。", level: 2 },
+            { id: "ca_d_50", text: "大喊「我是笨蛋」三聲。", level: 2 },
+          ],
+        },
+        合家歡樂: {
+          // Family (Level 1) - 安全、溫馨、老少咸宜
+          truth: [
+            { id: "fa_t_01", text: "你最喜歡家裡煮的哪一道菜？", level: 1 },
+            { id: "fa_t_02", text: "小時候你最喜歡的玩具是什麼？", level: 1 },
+            { id: "fa_t_03", text: "分享一個你小時候的糗事。", level: 1 },
+            { id: "fa_t_04", text: "你覺得家裡誰最愛睡覺？", level: 1 },
+            {
+              id: "fa_t_05",
+              text: "如果全家一起去旅遊，你最想去哪裡？",
+              level: 1,
+            },
+            { id: "fa_t_06", text: "你最喜歡的一部卡通是什麼？", level: 1 },
+            { id: "fa_t_07", text: "你覺得自己長得像爸爸還是媽媽？", level: 1 },
+            { id: "fa_t_08", text: "說出三個你最喜歡的零食。", level: 1 },
+            { id: "fa_t_09", text: "你最不喜歡做的家事是什麼？", level: 1 },
+            { id: "fa_t_10", text: "分享一件讓你覺得很幸福的事。", level: 1 },
+            { id: "fa_t_11", text: "你最喜歡學校的哪一門課？", level: 1 },
+            {
+              id: "fa_t_12",
+              text: "如果可以養任何動物，你想養什麼？",
+              level: 1,
+            },
+            { id: "fa_t_13", text: "你覺得誰是家裡的開心果？", level: 1 },
+            { id: "fa_t_14", text: "你最怕什麼昆蟲？", level: 1 },
+            { id: "fa_t_15", text: "說出一個你最好的朋友的名字。", level: 1 },
+            { id: "fa_t_16", text: "你最喜歡什麼顏色？", level: 1 },
+            {
+              id: "fa_t_17",
+              text: "如果可以不用上學/上班，你想做什麼？",
+              level: 1,
+            },
+            { id: "fa_t_18", text: "你最喜歡的迪士尼角色是誰？", level: 1 },
+            { id: "fa_t_19", text: "你覺得家裡誰最會煮飯？", level: 1 },
+            { id: "fa_t_20", text: "你最喜歡的水果是什麼？", level: 1 },
+            { id: "fa_t_21", text: "你曾經打破過家裡的東西嗎？", level: 1 },
+            { id: "fa_t_22", text: "你最喜歡的運動是什麼？", level: 1 },
+            {
+              id: "fa_t_23",
+              text: "如果可以變成一種動物，你想變什麼？",
+              level: 1,
+            },
+            { id: "fa_t_24", text: "你最喜歡的節日是哪一個？", level: 1 },
+            { id: "fa_t_25", text: "你覺得家裡誰最愛碎碎念？", level: 1 },
+            { id: "fa_t_26", text: "你最喜歡的一本書是什麼？", level: 1 },
+            {
+              id: "fa_t_27",
+              text: "你長大後想做什麼？（或小時候想做什麼）",
+              level: 1,
+            },
+            { id: "fa_t_28", text: "你最喜歡的甜點是什麼？", level: 1 },
+            { id: "fa_t_29", text: "你覺得誰最會唱歌？", level: 1 },
+            { id: "fa_t_30", text: "你最喜歡去哪裡玩？", level: 1 },
+            { id: "fa_t_31", text: "你曾經考過最差的分數是多少？", level: 1 },
+            { id: "fa_t_32", text: "你最喜歡的飲料是什麼？", level: 1 },
+            { id: "fa_t_33", text: "你覺得家裡誰最聰明？", level: 1 },
+            { id: "fa_t_34", text: "你最喜歡的季節？", level: 1 },
+            { id: "fa_t_35", text: "你曾經偷偷把菜丟掉嗎？", level: 1 },
+            { id: "fa_t_36", text: "你最喜歡的桌遊或遊戲是什麼？", level: 1 },
+            { id: "fa_t_37", text: "你覺得聖誕老公公是真的嗎？", level: 1 },
+            { id: "fa_t_38", text: "你最喜歡的早餐是什麼？", level: 1 },
+            { id: "fa_t_39", text: "你覺得家裡誰最愛看電視？", level: 1 },
+            { id: "fa_t_40", text: "你最想學會什麼才藝？", level: 1 },
+            { id: "fa_t_41", text: "你最喜歡的超級英雄是誰？", level: 1 },
+            { id: "fa_t_42", text: "你曾經在床上尿床嗎？", level: 1 },
+            { id: "fa_t_43", text: "你最喜歡的冰淇淋口味？", level: 1 },
+            { id: "fa_t_44", text: "你覺得家裡誰最愛乾淨？", level: 1 },
+            { id: "fa_t_45", text: "你最喜歡的一首歌？", level: 1 },
+            { id: "fa_t_46", text: "你最喜歡去動物園看什麼動物？", level: 1 },
+            { id: "fa_t_47", text: "你覺得家裡誰最搞笑？", level: 1 },
+            { id: "fa_t_48", text: "你最喜歡的披薩口味？", level: 1 },
+            { id: "fa_t_49", text: "你曾經撿到錢嗎？", level: 1 },
+            { id: "fa_t_50", text: "你最愛的人是誰？", level: 1 },
+          ],
+          dare: [
+            {
+              id: "fa_d_01",
+              text: "給坐在你右邊的人一個大大的擁抱。",
+              level: 1,
+            },
+            { id: "fa_d_02", text: "唱一首兒歌給大家聽。", level: 1 },
+            { id: "fa_d_03", text: "做一個最滑稽的鬼臉。", level: 1 },
+            { id: "fa_d_04", text: "模仿猴子的動作繞桌子一圈。", level: 1 },
+            { id: "fa_d_05", text: "說一個笑話讓大家笑。", level: 1 },
+            { id: "fa_d_06", text: "用屁股寫你的名字。", level: 1 },
+            { id: "fa_d_07", text: "頂著一本書在頭上走直線。", level: 1 },
+            {
+              id: "fa_d_08",
+              text: "和左邊的人猜拳，輸的人要學狗叫。",
+              level: 1,
+            },
+            { id: "fa_d_09", text: "閉著眼睛摸一樣東西並猜是什麼。", level: 1 },
+            { id: "fa_d_10", text: "跳一段自創的舞。", level: 1 },
+            { id: "fa_d_11", text: "模仿機器人說話。", level: 1 },
+            { id: "fa_d_12", text: "幫右邊的人搥背 10 下。", level: 1 },
+            { id: "fa_d_13", text: "用鼻子畫一個圈。", level: 1 },
+            { id: "fa_d_14", text: "大笑三聲「哈！哈！哈！」。", level: 1 },
+            { id: "fa_d_15", text: "做 5 個開合跳。", level: 1 },
+            { id: "fa_d_16", text: "模仿大象鼻子轉圈圈。", level: 1 },
+            { id: "fa_d_17", text: "用屁股撞一下左邊的人。", level: 1 },
+            { id: "fa_d_18", text: "學貓咪洗臉的動作。", level: 1 },
+            { id: "fa_d_19", text: "單腳站立 10 秒。", level: 1 },
+            { id: "fa_d_20", text: "模仿爸爸或媽媽生氣的樣子。", level: 1 },
+            { id: "fa_d_21", text: "用手當望遠鏡看大家。", level: 1 },
+            { id: "fa_d_22", text: "學鴨子走路。", level: 1 },
+            { id: "fa_d_23", text: "對著大家飛吻。", level: 1 },
+            { id: "fa_d_24", text: "模仿時鐘的指針動作。", level: 1 },
+            { id: "fa_d_25", text: "用慢動作High Five。", level: 1 },
+            { id: "fa_d_26", text: "學青蛙跳三下。", level: 1 },
+            {
+              id: "fa_d_27",
+              text: "用肚子頂一顆球（或枕頭）走一圈。",
+              level: 1,
+            },
+            { id: "fa_d_28", text: "模仿睡覺打呼的聲音。", level: 1 },
+            {
+              id: "fa_d_29",
+              text: "跟右邊的人握手說「你好帥/美」。",
+              level: 1,
+            },
+            { id: "fa_d_30", text: "做一個超人飛行的姿勢。", level: 1 },
+            { id: "fa_d_31", text: "模仿企鵝走路。", level: 1 },
+            { id: "fa_d_32", text: "用手比一個愛心送給大家。", level: 1 },
+            { id: "fa_d_33", text: "學恐龍叫。", level: 1 },
+            { id: "fa_d_34", text: "轉圈圈三圈然後擺Pose。", level: 1 },
+            { id: "fa_d_35", text: "模仿正在吃很酸的檸檬。", level: 1 },
+            { id: "fa_d_36", text: "跟左邊的人玩「黑白配」。", level: 1 },
+            { id: "fa_d_37", text: "用屁股寫數字 1 到 5。", level: 1 },
+            { id: "fa_d_38", text: "模仿兔子跳。", level: 1 },
+            { id: "fa_d_39", text: "假裝自己在開車。", level: 1 },
+            { id: "fa_d_40", text: "摸摸自己的鼻子再摸摸耳朵。", level: 1 },
+            { id: "fa_d_41", text: "學老爺爺/老奶奶走路。", level: 1 },
+            { id: "fa_d_42", text: "假裝自己在游泳。", level: 1 },
+            { id: "fa_d_43", text: "用膝蓋碰手肘。", level: 1 },
+            { id: "fa_d_44", text: "模仿一種樂器演奏。", level: 1 },
+            { id: "fa_d_45", text: "做一個鬼臉自拍。", level: 1 },
+            { id: "fa_d_46", text: "學公雞叫大家起床。", level: 1 },
+            { id: "fa_d_47", text: "假裝自己在彈鋼琴。", level: 1 },
+            { id: "fa_d_48", text: "用手做一個眼鏡戴上。", level: 1 },
+            { id: "fa_d_49", text: "模仿殭屍跳。", level: 1 },
+            { id: "fa_d_50", text: "大聲說「我愛我的家」！", level: 1 },
+          ],
+        },
+        only大人: {
+          // Adult (Level 4-6) - 辛辣、成人話題、飲酒
+          truth: [
+            { id: "ad_t_01", text: "你曾經在公共場合做過那檔事嗎？", level: 5 },
+            {
+              id: "ad_t_02",
+              text: "在場的人之中，如果必須選一個人發生關係，你會選誰？",
+              level: 5,
+            },
+            {
+              id: "ad_t_03",
+              text: "你最短的一次戀情（或性行為）持續多久？",
+              level: 4,
+            },
+            {
+              id: "ad_t_04",
+              text: "你曾經對伴侶說謊關於高潮的事嗎？",
+              level: 5,
+            },
+            { id: "ad_t_05", text: "你有過一夜情嗎？感覺如何？", level: 5 },
+            { id: "ad_t_06", text: "你最喜歡的體位是什麼？", level: 5 },
+            { id: "ad_t_07", text: "你曾經偷看過伴侶的手機嗎？", level: 4 },
+            { id: "ad_t_08", text: "你覺得性重要還是愛重要？", level: 4 },
+            { id: "ad_t_09", text: "你曾經幻想過朋友的伴侶嗎？", level: 5 },
+            {
+              id: "ad_t_10",
+              text: "你收過或發過最露骨的訊息是什麼？",
+              level: 5,
+            },
+            { id: "ad_t_11", text: "你曾經在夢裡夢過在場的誰？", level: 4 },
+            { id: "ad_t_12", text: "你最奇怪的性幻想是什麼？", level: 5 },
+            { id: "ad_t_13", text: "你曾經同時和兩個人曖昧嗎？", level: 4 },
+            {
+              id: "ad_t_14",
+              text: "你覺得自己性能力幾分（滿分10）？",
+              level: 5,
+            },
+            {
+              id: "ad_t_15",
+              text: "你曾經在喝醉後做過最後悔的事是什麼？",
+              level: 4,
+            },
+            { id: "ad_t_16", text: "你是否曾經對朋友有過非分之想？", level: 4 },
+            { id: "ad_t_17", text: "你最喜歡異性身體的哪個部位？", level: 4 },
+            { id: "ad_t_18", text: "你曾經被抓包過在看謎片嗎？", level: 4 },
+            { id: "ad_t_19", text: "你曾經在游泳池裡尿尿嗎？", level: 3 },
+            { id: "ad_t_20", text: "你是否曾經為了性而說謊？", level: 5 },
+            { id: "ad_t_21", text: "你曾經在車震過嗎？", level: 5 },
+            { id: "ad_t_22", text: "你最喜歡的內衣顏色？", level: 4 },
+            {
+              id: "ad_t_23",
+              text: "你曾經和比自己大/小10歲以上的人交往嗎？",
+              level: 4,
+            },
+            { id: "ad_t_24", text: "你曾經在辦公室有過性幻想嗎？", level: 5 },
+            { id: "ad_t_25", text: "你覺得在場誰的身材最好？", level: 4 },
+            { id: "ad_t_26", text: "你曾經拍過裸照嗎？", level: 5 },
+            { id: "ad_t_27", text: "你曾經使用過交友軟體約炮嗎？", level: 5 },
+            { id: "ad_t_28", text: "你最尷尬的一次性經驗？", level: 5 },
+            { id: "ad_t_29", text: "你曾經被劈腿過嗎？", level: 4 },
+            { id: "ad_t_30", text: "你曾經當過第三者嗎？", level: 5 },
+            { id: "ad_t_31", text: "你喜歡開燈還是關燈？", level: 4 },
+            { id: "ad_t_32", text: "你曾經在野外（非室內）做過嗎？", level: 5 },
+            { id: "ad_t_33", text: "你覺得尺寸重要嗎？", level: 5 },
+            { id: "ad_t_34", text: "你曾經假裝高潮過幾次？", level: 5 },
+            { id: "ad_t_35", text: "你曾經對老師有過性幻想嗎？", level: 4 },
+            { id: "ad_t_36", text: "你最喜歡的前戲是什麼？", level: 5 },
+            {
+              id: "ad_t_37",
+              text: "你曾經在看電影時做過羞羞的事嗎？",
+              level: 5,
+            },
+            { id: "ad_t_38", text: "你曾經懷疑過自己的性向嗎？", level: 4 },
+            { id: "ad_t_39", text: "你曾經和同性接吻過嗎？", level: 4 },
+            { id: "ad_t_40", text: "你覺得在場誰最色？", level: 4 },
+            { id: "ad_t_41", text: "你曾經在視訊時做過嗎？", level: 5 },
+            { id: "ad_t_42", text: "你曾經買過情趣用品嗎？", level: 4 },
+            { id: "ad_t_43", text: "你曾經在朋友家做過嗎？", level: 5 },
+            { id: "ad_t_44", text: "你最喜歡的角色扮演是什麼？", level: 5 },
+            { id: "ad_t_45", text: "你曾經因為性生活不合而分手嗎？", level: 5 },
+            { id: "ad_t_46", text: "你曾經在海邊做過嗎？", level: 5 },
+            { id: "ad_t_47", text: "你覺得自己是攻還是受？", level: 4 },
+            { id: "ad_t_48", text: "你曾經被父母撞見過嗎？", level: 6 },
+            { id: "ad_t_49", text: "你曾經同時喜歡上兩個人嗎？", level: 4 },
+            { id: "ad_t_50", text: "你曾經為了錢出賣過肉體嗎？", level: 6 },
+          ],
+          dare: [
+            { id: "ad_d_01", text: "脫掉一件衣物（配件不算）。", level: 4 },
+            { id: "ad_d_02", text: "發出高潮時的聲音，越大聲越好。", level: 5 },
+            { id: "ad_d_03", text: "選一位異性，深情對視 30 秒。", level: 4 },
+            { id: "ad_d_04", text: "讓在場的人檢查你的瀏覽器紀錄。", level: 5 },
+            { id: "ad_d_05", text: "親吻坐在你右邊的人的脖子。", level: 5 },
+            {
+              id: "ad_d_06",
+              text: "表演一段性感的鋼管舞（用椅子代替）。",
+              level: 4,
+            },
+            { id: "ad_d_07", text: "喝一杯酒（或特調飲料）。", level: 3 },
+            {
+              id: "ad_d_08",
+              text: "讓一位異性坐在你的大腿上持續一回合。",
+              level: 5,
+            },
+            { id: "ad_d_09", text: "用嘴巴傳遞冰塊給下一個人。", level: 5 },
+            {
+              id: "ad_d_10",
+              text: "隨機撥打一位異性朋友電話，呻吟一聲後掛斷。",
+              level: 6,
+            },
+            {
+              id: "ad_d_11",
+              text: "讓大家看你手機裡最性感的一張照片。",
+              level: 4,
+            },
+            { id: "ad_d_12", text: "模仿一種性愛姿勢。", level: 5 },
+            {
+              id: "ad_d_13",
+              text: "讓左邊的人在你的鎖骨上種草莓（或畫口紅印）。",
+              level: 5,
+            },
+            { id: "ad_d_14", text: "舔一下坐在你對面的人的耳朵。", level: 6 },
+            {
+              id: "ad_d_15",
+              text: "用嘴巴解開某人的鈕扣（如果有的話）。",
+              level: 5,
+            },
+            { id: "ad_d_16", text: "對著一位玩家跳電臀舞。", level: 4 },
+            { id: "ad_d_17", text: "含著一口水，讓大家逗你笑。", level: 3 },
+            { id: "ad_d_18", text: "展示你現在穿的內褲顏色。", level: 4 },
+            {
+              id: "ad_d_19",
+              text: "用誘惑的聲音讀出一段說明書文字。",
+              level: 4,
+            },
+            {
+              id: "ad_d_20",
+              text: "讓一位玩家把手伸進你的衣服裡暖手 10 秒。",
+              level: 5,
+            },
+            { id: "ad_d_21", text: "親吻右邊玩家的手背。", level: 4 },
+            { id: "ad_d_22", text: "讓左邊玩家打你的屁股一下。", level: 4 },
+            { id: "ad_d_23", text: "用嘴巴咬住一根香蕉並吃掉。", level: 5 },
+            { id: "ad_d_24", text: "對著鏡頭做出高潮臉。", level: 5 },
+            { id: "ad_d_25", text: "讓一位異性幫你塗護唇膏。", level: 4 },
+            { id: "ad_d_26", text: "在一位異性耳邊吹氣。", level: 5 },
+            {
+              id: "ad_d_27",
+              text: "用舌頭舔一下自己的嘴唇，做出誘惑表情。",
+              level: 4,
+            },
+            {
+              id: "ad_d_28",
+              text: "讓大家看你手機裡最近的一張自拍。",
+              level: 3,
+            },
+            { id: "ad_d_29", text: "模仿A片裡的經典台詞。", level: 5 },
+            {
+              id: "ad_d_30",
+              text: "讓一位異性摸你的腹肌（或肚子）。",
+              level: 4,
+            },
+            { id: "ad_d_31", text: "喝下一杯混酒。", level: 4 },
+            { id: "ad_d_32", text: "用嘴巴從桌上咬起一支筆。", level: 3 },
+            {
+              id: "ad_d_33",
+              text: "讓右邊的人坐在你背上做伏地挺身。",
+              level: 4,
+            },
+            { id: "ad_d_34", text: "對著一位異性壁咚。", level: 4 },
+            { id: "ad_d_35", text: "用嘴巴餵左邊的人吃東西。", level: 5 },
+            { id: "ad_d_36", text: "讓大家看你的搜尋紀錄。", level: 5 },
+            { id: "ad_d_37", text: "模仿脫衣舞孃的動作。", level: 5 },
+            { id: "ad_d_38", text: "讓一位異性聞你的脖子。", level: 5 },
+            {
+              id: "ad_d_39",
+              text: "用性感的聲音點餐（假裝打電話）。",
+              level: 4,
+            },
+            { id: "ad_d_40", text: "讓大家看你追蹤的IG正妹/帥哥。", level: 4 },
+            { id: "ad_d_41", text: "親吻左邊玩家的臉頰。", level: 4 },
+            { id: "ad_d_42", text: "讓右邊玩家幫你按摩大腿。", level: 5 },
+            { id: "ad_d_43", text: "用嘴巴解開自己的皮帶。", level: 5 },
+            { id: "ad_d_44", text: "對著一位異性跳一段貼身舞。", level: 5 },
+            {
+              id: "ad_d_45",
+              text: "讓大家看你手機裡最私密的一張照片（不一定要裸露）。",
+              level: 5,
+            },
+            { id: "ad_d_46", text: "模仿高潮時的表情自拍。", level: 5 },
+            { id: "ad_d_47", text: "讓一位異性幫你脫襪子。", level: 4 },
+            { id: "ad_d_48", text: "用舌頭寫出自己的名字。", level: 4 },
+            { id: "ad_d_49", text: "讓左邊的人檢查你的內衣顏色。", level: 5 },
+            { id: "ad_d_50", text: "大喊「我好想要」三聲。", level: 5 },
+          ],
+        },
+        生死之交: {
+          // Bestie (Level 3-5) - 秘密、吐槽、友情考驗
+          truth: [
+            {
+              id: "be_t_01",
+              text: "在場的人之中，你最不喜歡誰的穿衣風格？",
+              level: 3,
+            },
+            { id: "be_t_02", text: "你曾經在背後說過在場誰的壞話？", level: 4 },
+            {
+              id: "be_t_03",
+              text: "你覺得在場誰最可能會單身一輩子？",
+              level: 3,
+            },
+            { id: "be_t_04", text: "你曾經嫉妒過在場的誰？為什麼？", level: 3 },
+            {
+              id: "be_t_05",
+              text: "如果你必須絕交一個人，你會選誰？",
+              level: 4,
+            },
+            { id: "be_t_06", text: "你覺得誰的戀愛眼光最差？", level: 3 },
+            {
+              id: "be_t_07",
+              text: "分享一個你從未告訴過任何人的秘密。",
+              level: 4,
+            },
+            { id: "be_t_08", text: "你借過錢給誰但對方沒還？", level: 3 },
+            { id: "be_t_09", text: "你覺得在場誰最虛偽？", level: 5 },
+            { id: "be_t_10", text: "你上次說謊騙朋友是為了什麼？", level: 3 },
+            { id: "be_t_11", text: "你覺得誰最重色輕友？", level: 3 },
+            {
+              id: "be_t_12",
+              text: "你曾經喜歡過朋友的男/女朋友嗎？",
+              level: 4,
+            },
+            { id: "be_t_13", text: "在場誰的秘密你知道最多？", level: 2 },
+            { id: "be_t_14", text: "你覺得誰最需要看心理醫生？", level: 3 },
+            {
+              id: "be_t_15",
+              text: "如果我們都愛上同一個人，你會退出嗎？",
+              level: 3,
+            },
+            { id: "be_t_16", text: "你覺得在場誰最愛記仇？", level: 3 },
+            {
+              id: "be_t_17",
+              text: "你曾經想過要跟在場的誰斷絕關係？",
+              level: 5,
+            },
+            { id: "be_t_18", text: "你覺得在場誰最容易被騙？", level: 3 },
+            { id: "be_t_19", text: "你覺得誰的脾氣最差？", level: 3 },
+            {
+              id: "be_t_20",
+              text: "你曾經偷看過朋友的日記或訊息嗎？",
+              level: 4,
+            },
+            { id: "be_t_21", text: "你覺得在場誰最自戀？", level: 3 },
+            { id: "be_t_22", text: "你曾經討厭過在場的誰？", level: 4 },
+            { id: "be_t_23", text: "你覺得誰最愛裝熟？", level: 3 },
+            { id: "be_t_24", text: "你覺得誰最不守信用？", level: 3 },
+            { id: "be_t_25", text: "你曾經把朋友的秘密說出去過嗎？", level: 5 },
+            { id: "be_t_26", text: "你覺得在場誰最愛炫耀？", level: 3 },
+            { id: "be_t_27", text: "你覺得誰最容易出軌？", level: 4 },
+            {
+              id: "be_t_28",
+              text: "你曾經借給朋友東西但不想還他嗎？",
+              level: 3,
+            },
+            { id: "be_t_29", text: "你覺得誰最愛遲到？", level: 2 },
+            { id: "be_t_30", text: "你覺得誰最愛佔小便宜？", level: 3 },
+            { id: "be_t_31", text: "你曾經對朋友的另一半有意見嗎？", level: 4 },
+            { id: "be_t_32", text: "你覺得誰最愛八卦？", level: 3 },
+            { id: "be_t_33", text: "你覺得誰最難相處？", level: 4 },
+            { id: "be_t_34", text: "你曾經故意不回朋友訊息嗎？", level: 3 },
+            { id: "be_t_35", text: "你覺得誰最愛哭？", level: 2 },
+            { id: "be_t_36", text: "你覺得誰最沒主見？", level: 3 },
+            { id: "be_t_37", text: "你曾經封鎖過在場的誰嗎？", level: 5 },
+            { id: "be_t_38", text: "你覺得誰最愛喝酒？", level: 2 },
+            { id: "be_t_39", text: "你覺得誰最愛抱怨？", level: 3 },
+            { id: "be_t_40", text: "你覺得誰最愛管閒事？", level: 3 },
+            { id: "be_t_41", text: "你曾經跟朋友喜歡上同一個人嗎？", level: 4 },
+            { id: "be_t_42", text: "你覺得誰最愛裝可憐？", level: 4 },
+            { id: "be_t_43", text: "你覺得誰最愛搶風頭？", level: 3 },
+            { id: "be_t_44", text: "你曾經因為錢跟朋友吵架嗎？", level: 4 },
+            { id: "be_t_45", text: "你覺得誰最愛說謊？", level: 4 },
+            { id: "be_t_46", text: "你覺得誰最愛放鴿子？", level: 3 },
+            { id: "be_t_47", text: "你覺得誰最愛借錢？", level: 3 },
+            { id: "be_t_48", text: "你曾經覺得朋友很煩嗎？", level: 4 },
+            { id: "be_t_49", text: "你覺得誰最愛裝忙？", level: 3 },
+            { id: "be_t_50", text: "你覺得誰是你真正的最好的朋友？", level: 3 },
+          ],
+          dare: [
+            {
+              id: "be_d_01",
+              text: "交出手機，讓大家隨意挑選一條訊息朗讀。",
+              level: 4,
+            },
+            { id: "be_d_02", text: "給前任傳訊息說「我還想你」。", level: 5 },
+            {
+              id: "be_d_03",
+              text: "在社群媒體發一張超醜的自拍，並標註「這就是真實的我」。",
+              level: 4,
+            },
+            {
+              id: "be_d_04",
+              text: "讓在場的人翻閱你的相簿 1 分鐘。",
+              level: 4,
+            },
+            {
+              id: "be_d_05",
+              text: "打電話給父母說「我懷孕了/讓人懷孕了」。",
+              level: 5,
+            },
+            { id: "be_d_06", text: "模仿在場某個人的缺點。", level: 3 },
+            {
+              id: "be_d_07",
+              text: "讓大家看你和最近聊天對象的對話紀錄。",
+              level: 4,
+            },
+            {
+              id: "be_d_08",
+              text: "對著在場一個人深情告白 1 分鐘。",
+              level: 3,
+            },
+            {
+              id: "be_d_09",
+              text: "喝下一杯大家特製的「地獄飲料」。",
+              level: 4,
+            },
+            {
+              id: "be_d_10",
+              text: "把你的手機桌布換成在場某人的醜照。",
+              level: 3,
+            },
+            { id: "be_d_11", text: "大聲朗讀你最近的一則備忘錄。", level: 3 },
+            { id: "be_d_12", text: "讓右邊的人用口紅在你臉上畫畫。", level: 3 },
+            { id: "be_d_13", text: "公主抱左邊的人深蹲 5 下。", level: 3 },
+            { id: "be_d_14", text: "隨機打給一個朋友借 5000 元。", level: 4 },
+            {
+              id: "be_d_15",
+              text: "讓大家看你的網購購物車或搜尋紀錄。",
+              level: 4,
+            },
+            { id: "be_d_16", text: "打電話給一個朋友說你中樂透了。", level: 4 },
+            {
+              id: "be_d_17",
+              text: "讓大家看你手機裡最舊的一張照片。",
+              level: 3,
+            },
+            { id: "be_d_18", text: "模仿在場某人喝醉的樣子。", level: 3 },
+            {
+              id: "be_d_19",
+              text: "讓右邊的人幫你發一則IG限時動態。",
+              level: 4,
+            },
+            {
+              id: "be_d_20",
+              text: "隨機打給通訊錄裡的一個人唱生日快樂歌。",
+              level: 4,
+            },
+            { id: "be_d_21", text: "讓大家看你的YouTube觀看紀錄。", level: 4 },
+            {
+              id: "be_d_22",
+              text: "把你的LINE大頭貼換成鬼臉照一天。",
+              level: 4,
+            },
+            {
+              id: "be_d_23",
+              text: "讓左邊的人幫你綁頭髮（或弄亂頭髮）。",
+              level: 2,
+            },
+            { id: "be_d_24", text: "對著鏡頭說出三個自己的缺點。", level: 3 },
+            { id: "be_d_25", text: "讓大家看你封鎖的名單。", level: 5 },
+            {
+              id: "be_d_26",
+              text: "隨機傳一張貼圖給最近聊天的三個人。",
+              level: 3,
+            },
+            { id: "be_d_27", text: "讓右邊的人幫你選一件衣服脫掉。", level: 4 },
+            { id: "be_d_28", text: "模仿在場某人笑的聲音。", level: 3 },
+            { id: "be_d_29", text: "讓大家看你錢包裡的照片。", level: 3 },
+            { id: "be_d_30", text: "打電話給媽媽說「我愛你」。", level: 2 },
+            {
+              id: "be_d_31",
+              text: "讓左邊的人在你手臂上畫一隻烏龜。",
+              level: 2,
+            },
+            {
+              id: "be_d_32",
+              text: "大聲唸出你最近搜尋的三個關鍵字。",
+              level: 4,
+            },
+            { id: "be_d_33", text: "讓大家看你手機裡最尷尬的影片。", level: 4 },
+            { id: "be_d_34", text: "隨機打給一個異性朋友約吃飯。", level: 4 },
+            { id: "be_d_35", text: "讓右邊的人幫你回覆一則訊息。", level: 4 },
+            { id: "be_d_36", text: "模仿在場某人走路的樣子。", level: 3 },
+            {
+              id: "be_d_37",
+              text: "讓大家看你的Google Map搜尋紀錄。",
+              level: 3,
+            },
+            { id: "be_d_38", text: "隨機傳「我好寂寞」給一個朋友。", level: 5 },
+            {
+              id: "be_d_39",
+              text: "讓左邊的人幫你擦指甲油（或畫指甲）。",
+              level: 2,
+            },
+            { id: "be_d_40", text: "對著窗外大喊「我是笨蛋」。", level: 3 },
+            {
+              id: "be_d_41",
+              text: "讓大家看你手機裡最不想被看到的App。",
+              level: 4,
+            },
+            { id: "be_d_42", text: "隨機打給一個朋友說笑話。", level: 3 },
+            { id: "be_d_43", text: "讓右邊的人幫你按摩頭皮。", level: 2 },
+            { id: "be_d_44", text: "模仿在場某人自拍的姿勢。", level: 3 },
+            { id: "be_d_45", text: "讓大家看你的蝦皮購物車。", level: 3 },
+            {
+              id: "be_d_46",
+              text: "隨機傳一張自拍給最近聊天的異性。",
+              level: 4,
+            },
+            { id: "be_d_47", text: "讓左邊的人幫你畫眉毛。", level: 3 },
+            { id: "be_d_48", text: "對著鏡頭做鬼臉五連拍。", level: 2 },
+            {
+              id: "be_d_49",
+              text: "讓大家看你手機裡最久以前的照片。",
+              level: 3,
+            },
+            { id: "be_d_50", text: "大聲說出在場你最喜歡的人。", level: 4 },
+          ],
+        },
+        感情鑑定: {
+          // Couple (Level 3-5) - 情侶專屬、深入話題
+          truth: [
+            {
+              id: "cp_t_01",
+              text: "你第一次見到我時，對我的真實印象是什麼？",
+              level: 2,
+            },
+            {
+              id: "cp_t_02",
+              text: "我有什麼缺點是你一直忍受，但從來沒告訴過我的？",
+              level: 4,
+            },
+            {
+              id: "cp_t_03",
+              text: "你覺得我們這段關係最大的問題是什麼？",
+              level: 5,
+            },
+            {
+              id: "cp_t_04",
+              text: "你曾經動過分手的念頭嗎？什麼時候？",
+              level: 5,
+            },
+            { id: "cp_t_05", text: "你覺得我的家人喜歡你嗎？", level: 3 },
+            { id: "cp_t_06", text: "你最喜歡我身體的哪個部位？", level: 3 },
+            { id: "cp_t_07", text: "你覺得我們誰付出的比較多？", level: 4 },
+            { id: "cp_t_08", text: "你曾經對我說過最大的謊是什麼？", level: 5 },
+            { id: "cp_t_09", text: "如果我們分手了，你會怎麼做？", level: 4 },
+            { id: "cp_t_10", text: "你覺得我們的性生活美滿嗎？", level: 5 },
+            { id: "cp_t_11", text: "你最受不了我哪一點？", level: 4 },
+            {
+              id: "cp_t_12",
+              text: "你覺得我比你的前任好嗎？好在哪裡？",
+              level: 5,
+            },
+            { id: "cp_t_13", text: "你曾經精神出軌過嗎？", level: 5 },
+            { id: "cp_t_14", text: "你希望我哪方面可以改進？", level: 3 },
+            { id: "cp_t_15", text: "你覺得我們會結婚嗎？", level: 4 },
+            { id: "cp_t_16", text: "你最喜歡我穿哪一件衣服？", level: 2 },
+            { id: "cp_t_17", text: "你覺得我們誰比較愛吃醋？", level: 3 },
+            { id: "cp_t_18", text: "你曾經夢過和其他人在一起嗎？", level: 4 },
+            { id: "cp_t_19", text: "你覺得我們誰比較浪漫？", level: 2 },
+            { id: "cp_t_20", text: "你最難忘的一次約會是哪一次？", level: 2 },
+            { id: "cp_t_21", text: "你覺得我們誰比較會吵架？", level: 3 },
+            { id: "cp_t_22", text: "你曾經偷看過我的手機嗎？", level: 4 },
+            { id: "cp_t_23", text: "你覺得我們誰比較黏人？", level: 2 },
+            { id: "cp_t_24", text: "你最喜歡我的哪一個優點？", level: 2 },
+            { id: "cp_t_25", text: "你覺得我們誰比較會花錢？", level: 3 },
+            { id: "cp_t_26", text: "你曾經對我的朋友有過好感嗎？", level: 5 },
+            { id: "cp_t_27", text: "你覺得我們誰比較會照顧人？", level: 2 },
+            { id: "cp_t_28", text: "你最不喜歡我做什麼事？", level: 3 },
+            { id: "cp_t_29", text: "你覺得我們誰比較幽默？", level: 2 },
+            { id: "cp_t_30", text: "你曾經後悔跟我在一起嗎？", level: 5 },
+            { id: "cp_t_31", text: "你覺得我們誰比較聰明？", level: 2 },
+            { id: "cp_t_32", text: "你最喜歡我們一起做什麼事？", level: 2 },
+            { id: "cp_t_33", text: "你覺得我們誰比較會撒嬌？", level: 2 },
+            { id: "cp_t_34", text: "你曾經對我隱瞞過什麼事？", level: 4 },
+            { id: "cp_t_35", text: "你覺得我們誰比較會煮飯？", level: 2 },
+            { id: "cp_t_36", text: "你最喜歡我叫你什麼？", level: 2 },
+            { id: "cp_t_37", text: "你覺得我們誰比較愛乾淨？", level: 2 },
+            { id: "cp_t_38", text: "你曾經想過要跟我結婚嗎？", level: 4 },
+            { id: "cp_t_39", text: "你覺得我們誰比較會開車？", level: 2 },
+            { id: "cp_t_40", text: "你最喜歡我親你哪裡？", level: 3 },
+            { id: "cp_t_41", text: "你覺得我們誰比較會打扮？", level: 2 },
+            { id: "cp_t_42", text: "你曾經對我失望過嗎？", level: 4 },
+            { id: "cp_t_43", text: "你覺得我們誰比較會賺錢？", level: 3 },
+            { id: "cp_t_44", text: "你最喜歡我送你的什麼禮物？", level: 2 },
+            { id: "cp_t_45", text: "你覺得我們誰比較會睡覺？", level: 2 },
+            { id: "cp_t_46", text: "你曾經對我生氣但沒說出來嗎？", level: 3 },
+            { id: "cp_t_47", text: "你覺得我們誰比較會運動？", level: 2 },
+            { id: "cp_t_48", text: "你最喜歡我煮的哪一道菜？", level: 2 },
+            { id: "cp_t_49", text: "你覺得我們誰比較會唱歌？", level: 2 },
+            { id: "cp_t_50", text: "你現在有多愛我？（1-10分）", level: 3 },
+          ],
+          dare: [
+            {
+              id: "cp_d_01",
+              text: "深情對視 1 分鐘，誰先笑誰就輸（脫一件配件）。",
+              level: 2,
+            },
+            { id: "cp_d_02", text: "幫對方按摩肩膀 3 分鐘。", level: 2 },
+            { id: "cp_d_03", text: "親吻對方的腳背。", level: 4 },
+            { id: "cp_d_04", text: "用嘴巴幫對方脫掉襪子。", level: 3 },
+            { id: "cp_d_05", text: "公主抱對方持續 30 秒。", level: 3 },
+            { id: "cp_d_06", text: "在對方耳邊說三句最肉麻的情話。", level: 2 },
+            { id: "cp_d_07", text: "讓對方檢查你的手機 LINE 訊息。", level: 5 },
+            { id: "cp_d_08", text: "跳一支性感的舞給對方看。", level: 4 },
+            { id: "cp_d_09", text: "種一個草莓在對方不明顯的地方。", level: 4 },
+            { id: "cp_d_10", text: "模仿對方生氣時的樣子。", level: 2 },
+            { id: "cp_d_11", text: "用口紅在對方臉上寫「我愛你」。", level: 2 },
+            { id: "cp_d_12", text: "交換上衣穿直到下一回合。", level: 3 },
+            { id: "cp_d_13", text: "餵對方吃一樣東西（用嘴巴）。", level: 4 },
+            {
+              id: "cp_d_14",
+              text: "大聲喊出「我愛（對方名字）」三次。",
+              level: 1,
+            },
+            { id: "cp_d_15", text: "跪下假裝求婚。", level: 2 },
+            { id: "cp_d_16", text: "親吻對方的額頭。", level: 1 },
+            { id: "cp_d_17", text: "幫對方剪指甲。", level: 2 },
+            { id: "cp_d_18", text: "背著對方繞場一圈。", level: 3 },
+            { id: "cp_d_19", text: "用嘴巴餵對方喝水。", level: 3 },
+            { id: "cp_d_20", text: "幫對方梳頭髮。", level: 2 },
+            { id: "cp_d_21", text: "在對方手心寫字猜字。", level: 2 },
+            { id: "cp_d_22", text: "親吻對方的鼻子。", level: 1 },
+            { id: "cp_d_23", text: "幫對方塗護唇膏。", level: 2 },
+            { id: "cp_d_24", text: "坐在對方大腿上 1 分鐘。", level: 3 },
+            { id: "cp_d_25", text: "幫對方按摩小腿。", level: 2 },
+            { id: "cp_d_26", text: "親吻對方的耳朵。", level: 3 },
+            { id: "cp_d_27", text: "用鼻子磨對方的鼻子。", level: 2 },
+            { id: "cp_d_28", text: "幫對方脫鞋子。", level: 2 },
+            { id: "cp_d_29", text: "在對方脖子上吹氣。", level: 3 },
+            { id: "cp_d_30", text: "幫對方抓癢。", level: 2 },
+            { id: "cp_d_31", text: "親吻對方的手心。", level: 2 },
+            { id: "cp_d_32", text: "幫對方整理衣服。", level: 1 },
+            { id: "cp_d_33", text: "抱著對方轉圈圈。", level: 3 },
+            { id: "cp_d_34", text: "用臉頰磨對方的臉頰。", level: 2 },
+            { id: "cp_d_35", text: "幫對方擦汗。", level: 2 },
+            { id: "cp_d_36", text: "親吻對方的眼睛（閉眼）。", level: 2 },
+            { id: "cp_d_37", text: "幫對方戴上飾品。", level: 2 },
+            { id: "cp_d_38", text: "握著對方的手深情對視。", level: 2 },
+            { id: "cp_d_39", text: "幫對方按摩頭部。", level: 2 },
+            { id: "cp_d_40", text: "親吻對方的肩膀。", level: 2 },
+            { id: "cp_d_41", text: "幫對方搥背。", level: 2 },
+            { id: "cp_d_42", text: "用手指捲對方的頭髮。", level: 2 },
+            { id: "cp_d_43", text: "親吻對方的手腕。", level: 2 },
+            { id: "cp_d_44", text: "幫對方拉拉鍊（或扣釦子）。", level: 2 },
+            { id: "cp_d_45", text: "靠在對方肩膀上 1 分鐘。", level: 2 },
+            { id: "cp_d_46", text: "親吻對方的鎖骨。", level: 3 },
+            { id: "cp_d_47", text: "幫對方擦嘴巴。", level: 2 },
+            { id: "cp_d_48", text: "摸摸對方的頭。", level: 1 },
+            { id: "cp_d_49", text: "親吻對方的臉頰。", level: 1 },
+            { id: "cp_d_50", text: "大聲說「你是我的」！", level: 2 },
+          ],
+        },
+        custom: {
+          truth: [],
+          dare: [],
+        },
+      };
+
+      const defaultPunishments = [
+        {
+          id: "p_01",
+          text: "罰酒一杯（或喝一大口檸檬汁）。",
+          type: "drinking",
+        },
+        { id: "p_02", text: "伏地挺身 20 下。", type: "physical" },
+        {
+          id: "p_03",
+          text: "讓坐在你右邊的人在你的臉上畫一個圖案。",
+          type: "shame",
+        },
+        {
+          id: "p_04",
+          text: "交出手機，讓大家隨意挑選一條訊息朗讀。",
+          type: "privacy",
+        },
+        {
+          id: "p_05",
+          text: "維持平板支撐 (Plank) 直到下一回合結束。",
+          type: "physical",
+        },
+      ];
+
+      const defaultPlayers = [
+        {
+          id: "p1",
+          name: "默認玩家1",
+          weight: 5,
+          score: 0,
+          history: { truth: 0, dare: 0, punishment: 0 },
+        },
+        {
+          id: "p2",
+          name: "默認玩家2",
+          weight: 5,
+          score: 0,
+          history: { truth: 0, dare: 0, punishment: 0 },
+        },
+        {
+          id: "p3",
+          name: "默認玩家3",
+          weight: 5,
+          score: 0,
+          history: { truth: 0, dare: 0, punishment: 0 },
+        },
+      ];
+
+      // === 主程式 (App Component) ===
+
+      // 音效管理器 (Web Audio API)
+      const soundManager = {
+        ctx: null,
+        init: function () {
+          if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (this.ctx.state === "suspended") {
+            this.ctx.resume();
+          }
+        },
+        playTone: function (freq, type, duration, vol = 0.1) {
+          if (!this.ctx) this.init();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.01,
+            this.ctx.currentTime + duration
+          );
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        },
+        playClick: function () {
+          this.playTone(800, "sine", 0.1, 0.05);
+        },
+        playTick: function () {
+          this.playTone(400, "square", 0.05, 0.03);
+        },
+        playWin: function () {
+          if (!this.ctx) this.init();
+          const now = this.ctx.currentTime;
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+            this.playTone(freq, "triangle", 0.3, 0.1);
+            // Arpeggio effect handled by manual calls if needed, but simple chord here
+            // For better effect, let's just play a simple high chime
+          });
+          // Simple sequence
+          this.playTone(523.25, "sine", 0.1, 0.1);
+          setTimeout(() => this.playTone(659.25, "sine", 0.1, 0.1), 100);
+          setTimeout(() => this.playTone(783.99, "sine", 0.4, 0.1), 200);
+        },
+        playAlarm: function () {
+          this.playTone(880, "sawtooth", 0.5, 0.1);
+          setTimeout(() => this.playTone(880, "sawtooth", 0.5, 0.1), 600);
+        },
+      };
+
+      function App() {
+        // === 狀態管理 ===
+        // LocalStorage 輔助函式：讀取存檔
+        const getSavedState = (key, defaultValue) => {
+          try {
+            const saved = localStorage.getItem(key);
+            return saved ? JSON.parse(saved) : defaultValue;
+          } catch (e) {
+            return defaultValue;
+          }
+        };
+
+        const [playableData, setPlayableData] = useState(() => {
+          const savedCustom = getSavedState("tod_custom_pack", null);
+          const initial = { ...defaultGameData };
+          if (savedCustom) {
+            initial.custom = savedCustom;
+          }
+          return initial;
+        });
+        const [currentCard, setCurrentCard] = useState(null);
+        const [gameMode, setGameMode] = useState(null); // 'truth', 'dare', 'punishment'
+        const [isAnimating, setIsAnimating] = useState(false);
+        const [selectedPack, setSelectedPack] = useState(() =>
+          getSavedState("tod_settings_pack", "普通朋友")
+        );
+        const [theme, setTheme] = useState(() =>
+          getSavedState("tod_theme", "party")
+        );
+
+        const [isNavOpen, setIsNavOpen] = useState(false);
+        const [currentView, setCurrentView] = useState("game");
+
+        // 輪盤狀態
+        const [rouletteState, setRouletteState] = useState({
+          isSpinning: false,
+          items: [],
+          targetIndex: 0,
+        });
+
+        // 轉盤速度
+        const [spinDelay, setSpinDelay] = useState(() =>
+          getSavedState("tod_settings_speed", 800)
+        );
+
+        // 玩家列表
+        const [players, setPlayers] = useState(() => {
+          const saved = getSavedState("tod_players", defaultPlayers);
+          return saved.length > 0 ? saved : defaultPlayers;
+        });
+        const [newPlayerName, setNewPlayerName] = useState("");
+
+        const [customInputTruth, setCustomInputTruth] = useState("");
+        const [customInputDare, setCustomInputDare] = useState("");
+
+        // 當前執行者 ID
+        const [activePlayerId, setActivePlayerId] = useState(null);
+        const [lastPlayerId, setLastPlayerId] = useState(null);
+
+        const [turnPhase, setTurnPhase] = useState("idle"); // idle, spinning, selected
+        const [timer, setTimer] = useState(0);
+
+        const [nextInstruction, setNextInstruction] = useState({
+          icon: "🎲",
+          text: "準備抽選",
+          type: "none",
+          targetPlayer: null,
+        });
+
+        const [nextPlayerRates, setNextPlayerRates] = useState(() =>
+          getSavedState("tod_settings_rates", {
+            clockwise: 10,
+            random: 70,
+            self: 20,
+            choose: 0,
+          })
+        );
+
+        const [historyLog, setHistoryLog] = useState(() =>
+          getSavedState("tod_history", [])
+        );
+
+        const [punishmentList, setPunishmentList] = useState(() =>
+          getSavedState("tod_punishments", defaultPunishments)
+        );
+        const [customInputPunishment, setCustomInputPunishment] = useState("");
+
+        const [managingPack, setManagingPack] = useState("custom");
+
+        // === 核心邏輯 ===
+
+        const handleAddPlayer = (e) => {
+          soundManager.playClick();
+          e.preventDefault();
+          if (!newPlayerName.trim()) return;
+          const newPlayer = {
+            id: Date.now(),
+            name: newPlayerName.trim(),
+            weight: 5,
+            score: 0,
+            history: { truth: 0, dare: 0, punishment: 0 },
+          };
+          setPlayers([...players, newPlayer]);
+          setNewPlayerName("");
+        };
+
+        const handleRemovePlayer = (id) => {
+          soundManager.playClick();
+          setPlayers(players.filter((p) => p.id !== id));
+        };
+
+        const handlePlayerWeightChange = (id, newWeight) => {
+          // No sound for slider drag to avoid spam
+          setPlayers(
+            players.map((p) =>
+              p.id === id ? { ...p, weight: parseInt(newWeight) } : p
+            )
+          );
+        };
+
+        const pickSpecificPlayer = () => {
+          if (players.length === 0) return null;
+          const totalWeight = players.reduce((sum, p) => sum + p.weight, 0);
+          if (totalWeight === 0) return null;
+          let randomNum = Math.random() * totalWeight;
+          for (const player of players) {
+            if (randomNum < player.weight) return player;
+            randomNum -= player.weight;
+          }
+          return players[0];
+        };
+
+        const getRandomRouletteItem = () => {
+          if (players.length === 0)
+            return { icon: "❓", text: "無玩家", type: "none" };
+          const pool = players.map((p) => ({
+            icon: "👤",
+            text: p.name,
+            type: "player",
+            id: p.id,
+          }));
+
+          // Add flavor items based on settings
+          if (nextPlayerRates.clockwise > 0)
+            pool.push({ icon: "👉", text: "順時針", type: "flavor" });
+          if (nextPlayerRates.self > 0)
+            pool.push({ icon: "🔄", text: "連莊", type: "flavor" });
+
+          return pool[Math.floor(Math.random() * pool.length)];
+        };
+
+        const triggerRandomDestiny = (player) => {
+          const rand = Math.random();
+          if (rand < 0.4) {
+            drawCard("truth", player);
+          } else if (rand < 0.8) {
+            drawCard("dare", player);
+          } else {
+            drawPassCard(player);
+          }
+        };
+
+        const drawPassCard = (player) => {
+          if (player) setActivePlayerId(player.id);
+          setIsAnimating(true);
+          setGameMode("pass");
+          setTimeout(() => {
+            setCurrentCard({
+              id: "pass_" + Date.now(),
+              text: "下面一位！(直接跳過)",
+              type: "pass",
+            });
+            setIsAnimating(false);
+          }, spinDelay);
+        };
+
+        const rollNextPlayer = (instant = false) => {
+          soundManager.playClick();
+          if (players.length === 0) {
+            alert("請先新增玩家！");
+            return;
+          }
+
+          // 1. Calculate Weights
+          const rates = nextPlayerRates;
+          const options = [{ type: "random", weight: rates.random }];
+
+          // Only add relative options if we have history and valid last player
+          if (lastPlayerId && players.find((p) => p.id === lastPlayerId)) {
+            options.push({ type: "self", weight: rates.self });
+            if (players.length > 1) {
+              options.push({ type: "clockwise", weight: rates.clockwise });
+            }
+          }
+
+          const totalWeight = options.reduce((sum, opt) => sum + opt.weight, 0);
+          let selectedType = "random";
+
+          if (totalWeight > 0) {
+            let r = Math.random() * totalWeight;
+            for (const opt of options) {
+              if (r < opt.weight) {
+                selectedType = opt.type;
+                break;
+              }
+              r -= opt.weight;
+            }
+          }
+
+          // 2. Resolve to Player
+          let targetPlayer = null;
+          let displayText = "";
+          let displayIcon = "";
+
+          if (selectedType === "clockwise") {
+            const lastIdx = players.findIndex((p) => p.id === lastPlayerId);
+            const nextIdx = (lastIdx + 1) % players.length;
+            targetPlayer = players[nextIdx];
+            displayText = `順時針 (${targetPlayer.name})`;
+            displayIcon = "👉";
+          } else if (selectedType === "self") {
+            targetPlayer = players.find((p) => p.id === lastPlayerId);
+            displayText = `連莊 (${targetPlayer.name})`;
+            displayIcon = "🔄";
+          } else {
+            // Random
+            targetPlayer = pickSpecificPlayer();
+            displayText = targetPlayer.name;
+            displayIcon = "👤";
+          }
+
+          const result = {
+            id: "player",
+            icon: displayIcon,
+            text: displayText,
+            type: "player",
+            targetPlayer: targetPlayer,
+          };
+
+          finalizeRoll(result, instant);
+        };
+
+        const finalizeRoll = (result, instant) => {
+          if (instant) {
+            setNextInstruction(result);
+            setRouletteState({
+              isSpinning: false,
+              items: [result],
+              targetIndex: 0,
+            });
+            setTurnPhase("selected");
+            return;
+          }
+
+          setTurnPhase("spinning");
+
+          // 準備輪盤動畫數據
+          const totalItems = 40;
+          const targetIndex = 35;
+
+          // 為了視覺連續性，列表的第一個項目應該是當前顯示的項目
+          const startItem = nextInstruction;
+
+          const items = Array.from({ length: totalItems }, (_, i) => {
+            if (i === 0) return startItem;
+            if (i === targetIndex) return result;
+            return getRandomRouletteItem();
+          });
+
+          // 1. 重置到起點 (無動畫)
+          setRouletteState({ isSpinning: false, items, targetIndex: 0 });
+
+          // 2. 開始旋轉 (有動畫)
+          setTimeout(() => {
+            setRouletteState((prev) => ({
+              ...prev,
+              isSpinning: true,
+              targetIndex,
+            }));
+
+            // 3. 動畫結束後更新指令並解鎖
+            setTimeout(() => {
+              soundManager.playWin();
+              setNextInstruction(result);
+              setRouletteState((prev) => ({ ...prev, isSpinning: false }));
+              setTurnPhase("selected");
+
+              // 自動觸發隨機命運
+              setTimeout(() => {
+                triggerRandomDestiny(result.targetPlayer);
+              }, 1000);
+            }, 3000);
+          }, 50);
+        };
+
+        const drawCard = (type, specificPlayer = null) => {
+          if (isAnimating || rouletteState.isSpinning) return;
+          soundManager.playClick();
+
+          let deck = [];
+
+          if (selectedPack === "custom") {
+            // 混沌大亂鬥：聚合所有題庫
+            Object.values(playableData).forEach((pack) => {
+              if (pack[type]) {
+                deck = [...deck, ...pack[type]];
+              }
+            });
+          } else {
+            // 一般模式：該模式題目 + 自定義題目 (全模式通用)
+            if (playableData[selectedPack]?.[type]) {
+              deck = [...playableData[selectedPack][type]];
+            }
+            if (playableData.custom?.[type]) {
+              deck = [...deck, ...playableData.custom[type]];
+            }
+          }
+
+          if (!deck || deck.length === 0) {
+            alert(`😱 喔喔！題庫是空的！`);
+            return;
+          }
+
+          const target = specificPlayer || nextInstruction.targetPlayer;
+          setActivePlayerId(target ? target.id : null);
+
+          setIsAnimating(true);
+          setGameMode(type);
+
+          setTimeout(() => {
+            const randomIdx = Math.floor(Math.random() * deck.length);
+            setCurrentCard(deck[randomIdx]);
+            setIsAnimating(false);
+          }, spinDelay);
+        };
+
+        const drawPunishment = () => {
+          if (isAnimating || rouletteState.isSpinning) return;
+          soundManager.playClick();
+          setIsAnimating(true);
+          setGameMode("punishment");
+          setTimeout(() => {
+            const randomIdx = Math.floor(Math.random() * punishmentList.length);
+            setCurrentCard(punishmentList[randomIdx]);
+            setIsAnimating(false);
+          }, spinDelay + 200);
+        };
+
+        const completeTurn = () => {
+          soundManager.playClick();
+          if (activePlayerId && gameMode !== "pass") {
+            const player = players.find((p) => p.id === activePlayerId);
+            if (player && currentCard) {
+              setHistoryLog((prev) => [
+                {
+                  id: Date.now(),
+                  type: gameMode,
+                  text: currentCard.text,
+                  playerName: player.name,
+                  time: new Date().toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                },
+                ...prev,
+              ]);
+            }
+            setLastPlayerId(activePlayerId);
+            setPlayers((prevPlayers) =>
+              prevPlayers.map((p) => {
+                if (p.id === activePlayerId) {
+                  const scoreToAdd = gameMode === "dare" ? 2 : 1;
+                  const historyKey = gameMode;
+                  return {
+                    ...p,
+                    score: p.score + scoreToAdd,
+                    history: {
+                      ...p.history,
+                      [historyKey]: p.history[historyKey] + 1,
+                    },
+                  };
+                }
+                return p;
+              })
+            );
+          }
+          setCurrentCard(null);
+          setGameMode(null);
+          setActivePlayerId(null);
+          setTurnPhase("idle");
+        };
+
+        const handleAddQuestion = (pack, type, text, setText) => {
+          if (!text.trim()) return;
+          soundManager.playClick();
+          setPlayableData((prev) => ({
+            ...prev,
+            [pack]: {
+              ...prev[pack],
+              [type]: [
+                ...prev[pack][type],
+                {
+                  id: `${pack}_${type}_${Date.now()}`,
+                  text: text.trim(),
+                  level: 1,
+                },
+              ],
+            },
+          }));
+          setText("");
+        };
+
+        const handleRemoveQuestion = (pack, type, id) => {
+          soundManager.playClick();
+          setPlayableData((prev) => ({
+            ...prev,
+            [pack]: {
+              ...prev[pack],
+              [type]: prev[pack][type].filter((item) => item.id !== id),
+            },
+          }));
+        };
+
+        const addPunishment = (text) => {
+          soundManager.playClick();
+          if (!text.trim()) return;
+          setPunishmentList((prev) => [
+            ...prev,
+            { id: `p_c_${Date.now()}`, text: text.trim(), type: "custom" },
+          ]);
+          setCustomInputPunishment("");
+        };
+
+        const removePunishment = (id) => {
+          soundManager.playClick();
+          setPunishmentList((prev) => prev.filter((p) => p.id !== id));
+        };
+
+        const handleRateChange = (key, value) => {
+          const newVal = parseInt(value);
+          setNextPlayerRates((prev) => {
+            const activeKeys = ["clockwise", "random", "self"];
+            if (!activeKeys.includes(key)) return { ...prev, [key]: newVal };
+
+            const otherKeys = activeKeys.filter((k) => k !== key);
+            const currentSumOthers = otherKeys.reduce(
+              (sum, k) => sum + prev[k],
+              0
+            );
+
+            if (newVal + currentSumOthers <= 100) {
+              return { ...prev, [key]: newVal };
+            }
+
+            let remainingOverflow = newVal + currentSumOthers - 100;
+            let newRates = { ...prev, [key]: newVal };
+            const othersSorted = otherKeys
+              .map((k) => ({ key: k, val: prev[k] }))
+              .sort((a, b) => b.val - a.val);
+
+            for (const other of othersSorted) {
+              if (remainingOverflow <= 0) break;
+              const deduction = Math.min(other.val, remainingOverflow);
+              newRates[other.key] -= deduction;
+              remainingOverflow -= deduction;
+            }
+            return newRates;
+          });
+        };
+
+        const handleClearPack = (pack) => {
+          if (
+            window.confirm(
+              `確定要清空「${
+                pack === "custom" ? "自定義" : pack
+              }」的所有題目嗎？`
+            )
+          ) {
+            soundManager.playClick();
+            setPlayableData((prev) => ({
+              ...prev,
+              [pack]: { truth: [], dare: [] },
+            }));
+          }
+        };
+
+        const handleRestorePack = (pack) => {
+          if (pack === "custom") return;
+          if (window.confirm(`確定要將「${pack}」恢復為預設值嗎？`)) {
+            soundManager.playClick();
+            setPlayableData((prev) => ({
+              ...prev,
+              [pack]: JSON.parse(JSON.stringify(defaultGameData[pack])),
+            }));
+          }
+        };
+
+        const handleRestoreDefault = () => {
+          if (window.confirm("重置所有設定?")) {
+            soundManager.playClick();
+            setPlayableData(defaultGameData);
+            setSelectedPack("普通朋友");
+            localStorage.removeItem("tod_custom_pack");
+            setPunishmentList(defaultPunishments);
+            localStorage.removeItem("tod_punishments");
+            setNextPlayerRates({
+              clockwise: 10,
+              random: 70,
+              self: 20,
+              choose: 0,
+            });
+            setSpinDelay(800);
+            setPlayers([...defaultPlayers]);
+            setHistoryLog([]);
+            localStorage.removeItem("tod_history");
+            reset();
+          }
+        };
+
+        // 截圖分享功能
+        const handleShare = async () => {
+          soundManager.playClick();
+          const cardElement = document.getElementById("game-card");
+          if (!cardElement) return;
+
+          try {
+            const canvas = await window.html2canvas(cardElement, {
+              backgroundColor: theme === "party" ? "#ffffff" : "#1e1e1e",
+              scale: 2, // 提高解析度
+              logging: false,
+              useCORS: true,
+            });
+
+            canvas.toBlob(async (blob) => {
+              if (!blob) return;
+
+              // 嘗試使用 Web Share API (手機端)
+              if (navigator.share && navigator.canShare) {
+                const file = new File([blob], "tod_card.png", {
+                  type: "image/png",
+                });
+                const shareData = {
+                  files: [file],
+                  title: "真心話大冒險",
+                  text: "這題太狠了！😱 #TruthOrDare",
+                };
+
+                if (navigator.canShare(shareData)) {
+                  try {
+                    await navigator.share(shareData);
+                    return;
+                  } catch (err) {
+                    console.log("Share cancelled/failed", err);
+                  }
+                }
+              }
+
+              // 備案：直接下載 (電腦端)
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `tod_card_${Date.now()}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            });
+          } catch (err) {
+            console.error("Screenshot error:", err);
+            alert("截圖失敗，請稍後再試");
+          }
+        };
+
+        // 資料匯出
+        const handleExportData = () => {
+          soundManager.playClick();
+          const data = {
+            players,
+            customPack: playableData.custom,
+            punishments: punishmentList,
+            settings: {
+              theme,
+              spinDelay,
+              selectedPack,
+            },
+          };
+          const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: "application/json",
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `tod_backup_${new Date()
+            .toISOString()
+            .slice(0, 10)}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        // 資料匯入
+        const handleImportData = (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            try {
+              const data = JSON.parse(event.target.result);
+              if (data.players) setPlayers(data.players);
+              if (data.customPack)
+                setPlayableData((prev) => ({
+                  ...prev,
+                  custom: data.customPack,
+                }));
+              if (data.punishments) setPunishmentList(data.punishments);
+              if (data.settings) {
+                if (data.settings.theme) setTheme(data.settings.theme);
+                if (data.settings.spinDelay)
+                  setSpinDelay(data.settings.spinDelay);
+                if (data.settings.selectedPack)
+                  setSelectedPack(data.settings.selectedPack);
+              }
+              alert("資料匯入成功！");
+              soundManager.playWin();
+            } catch (err) {
+              alert("匯入失敗：檔案格式錯誤");
+            }
+          };
+          reader.readAsText(file);
+        };
+
+        const toggleTheme = () => {
+          soundManager.playClick();
+          setTheme((prev) => (prev === "royal" ? "party" : "royal"));
+        };
+        const reset = () => {
+          setCurrentCard(null);
+          setGameMode(null);
+          setActivePlayerId(null);
+          setTurnPhase("idle");
+        };
+
+        // 自動存檔：當主題或玩家資料變更時，寫入 LocalStorage
+        useEffect(() => {
+          localStorage.setItem("tod_theme", JSON.stringify(theme));
+        }, [theme]);
+
+        useEffect(() => {
+          localStorage.setItem("tod_players", JSON.stringify(players));
+        }, [players]);
+
+        useEffect(() => {
+          if (playableData.custom) {
+            localStorage.setItem(
+              "tod_custom_pack",
+              JSON.stringify(playableData.custom)
+            );
+          }
+        }, [playableData]);
+
+        // 自動存檔：設定與機率
+        useEffect(() => {
+          localStorage.setItem(
+            "tod_settings_pack",
+            JSON.stringify(selectedPack)
+          );
+        }, [selectedPack]);
+
+        useEffect(() => {
+          localStorage.setItem("tod_settings_speed", JSON.stringify(spinDelay));
+        }, [spinDelay]);
+
+        useEffect(() => {
+          localStorage.setItem(
+            "tod_settings_rates",
+            JSON.stringify(nextPlayerRates)
+          );
+        }, [nextPlayerRates]);
+
+        useEffect(() => {
+          localStorage.setItem(
+            "tod_punishments",
+            JSON.stringify(punishmentList)
+          );
+        }, [punishmentList]);
+
+        useEffect(() => {
+          localStorage.setItem("tod_history", JSON.stringify(historyLog));
+        }, [historyLog]);
+
+        // 計時器邏輯
+        useEffect(() => {
+          let interval;
+          if (timer > 0) {
+            interval = setInterval(() => {
+              setTimer((prev) => prev - 1);
+            }, 1000);
+            // 最後 3 秒發出警示
+            if (timer <= 3) soundManager.playTick();
+          } else if (timer === 0 && interval) {
+            // 這裡邏輯有點複雜，因為 timer 0 會觸發清除 interval
+            // 簡單處理：在 timer 變更為 0 的前一刻（即 1 -> 0）觸發鬧鐘
+            // 但在 useEffect 中較難捕捉，改在 setTimer 處處理或忽略
+          }
+          return () => clearInterval(interval);
+        }, [timer]);
+
+        // 切換卡片時重置計時器
+        useEffect(() => setTimer(0), [currentCard]);
+
+        // 輪盤轉動音效
+        useEffect(() => {
+          let spinInterval;
+          if (rouletteState.isSpinning) {
+            spinInterval = setInterval(() => {
+              soundManager.playTick();
+            }, 100); // 每 100ms 播放一次滴答聲
+          }
+          return () => clearInterval(spinInterval);
+        }, [rouletteState.isSpinning]);
+
+        const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
+        return (
+          <div
+            className={`min-h-screen transition-colors duration-500 bg-skin-base text-skin-text ${
+              theme === "party" ? "theme-party" : ""
+            } font-sans overflow-x-hidden relative`}
+          >
+            {/* Hamburger Menu */}
+            <button
+              onClick={() => {
+                soundManager.playClick();
+                setIsNavOpen(!isNavOpen);
+              }}
+              className="fixed top-4 left-4 z-50 p-3 rounded-full bg-skin-card border border-skin-border text-skin-text shadow-lg hover:bg-skin-accent hover:text-black transition-all duration-300"
+            >
+              {isNavOpen ? "✕" : "☰"}
+            </button>
+
+            <nav
+              className={`fixed top-0 left-0 h-full w-64 bg-skin-card/95 backdrop-blur-md border-r border-skin-border flex flex-col py-24 gap-2 transition-transform duration-300 z-40 ${
+                isNavOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+            >
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("game");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "game"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">🏠</span>
+                  <span className="font-bold tracking-widest">遊戲主頁</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("modes");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "modes"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">🎮</span>
+                  <span className="font-bold tracking-widest">遊戲模式</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("players");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "players"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">👥</span>
+                  <span className="font-bold tracking-widest">玩家名單</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("customPack");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "customPack"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">📝</span>
+                  <span className="font-bold tracking-widest">自定義題庫</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("leaderboard");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "leaderboard"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                  title="排行榜"
+                >
+                  <span className="text-2xl">🏆</span>
+                  <span className="font-bold tracking-widest">排行榜</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("history");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "history"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">📜</span>
+                  <span className="font-bold tracking-widest">歷史紀錄</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("settings");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "settings"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">⚙️</span>
+                  <span className="font-bold tracking-widest">遊戲設定</span>
+                </button>
+              </div>
+            </nav>
+
+            <main className="flex flex-col items-center justify-center min-h-[70vh] p-4">
+              {currentView === "game" && (
+                <>
+                  <header className="mb-8 text-center animate-fade-in">
+                    <h1 className="text-5xl md:text-7xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-luxury-gold to-skin-text tracking-wider mb-4">
+                      TRUTH OR DARE
+                    </h1>
+                    <div className="text-skin-muted text-sm uppercase tracking-[0.3em] mb-8">
+                      Current Mode:{" "}
+                      <span className="text-skin-accent">{selectedPack}</span>
+                    </div>
+                  </header>
+
+                  <div className="w-full max-w-md min-h-[400px] flex flex-col items-center justify-center relative perspective-1000 animate-fade-in">
+                    {currentCard ? (
+                      <div
+                        id="game-card"
+                        className={`w-full bg-skin-card border p-8 rounded-2xl shadow-2xl transform backface-hidden transition-all ${
+                          gameMode === "punishment"
+                            ? "border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.3)]"
+                            : "border-skin-border"
+                        } ${
+                          isAnimating
+                            ? "rotate-y-180 opacity-0"
+                            : "rotate-y-0 opacity-100"
+                        }`}
+                        style={{ transitionDuration: `${spinDelay}ms` }}
+                      >
+                        <div className="flex justify-between items-center mb-8">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest ${
+                                gameMode === "truth"
+                                  ? "bg-blue-500/10 text-blue-400"
+                                  : gameMode === "dare"
+                                  ? "bg-red-500/10 text-red-400"
+                                  : gameMode === "pass"
+                                  ? "bg-gray-500/10 text-gray-400"
+                                  : "bg-yellow-500/10 text-yellow-500"
+                              }`}
+                            >
+                              {gameMode === "truth"
+                                ? "真心話"
+                                : gameMode === "dare"
+                                ? "DARE"
+                                : gameMode === "pass"
+                                ? "PASS"
+                                : "PUNISHMENT"}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleShare();
+                              }}
+                              className="text-skin-muted hover:text-skin-accent transition-colors p-1"
+                              title="分享截圖"
+                              data-html2canvas-ignore
+                            >
+                              📸
+                            </button>
+                          </div>
+
+                          {activePlayerId &&
+                            players.find((p) => p.id === activePlayerId) && (
+                              <span className="text-xs bg-skin-accent text-black px-2 py-1 rounded font-bold animate-pulse">
+                                執行者:{" "}
+                                {
+                                  players.find((p) => p.id === activePlayerId)
+                                    .name
+                                }
+                              </span>
+                            )}
+                        </div>
+
+                        <h2
+                          className={`text-2xl md:text-3xl font-serif leading-relaxed min-h-[160px] flex items-center justify-center text-center ${
+                            gameMode === "punishment"
+                              ? "text-yellow-500 font-bold"
+                              : gameMode === "pass"
+                              ? "text-skin-muted font-bold"
+                              : "text-skin-text"
+                          }`}
+                        >
+                          {currentCard.text}
+                        </h2>
+
+                        {/* Timer Section */}
+                        <div className="flex flex-col items-center justify-center mb-6 h-12">
+                          {timer > 0 ? (
+                            <button
+                              onClick={() => {
+                                soundManager.playClick();
+                                setTimer(0);
+                              }}
+                              className="text-4xl font-bold text-skin-accent animate-pulse hover:text-red-500 transition-colors"
+                              title="點擊停止"
+                            >
+                              {timer}s
+                            </button>
+                          ) : (
+                            <div className="flex gap-3 opacity-50 hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => {
+                                  soundManager.playClick();
+                                  setTimer(30);
+                                }}
+                                className="flex items-center gap-1 px-3 py-1 rounded-full border border-skin-border text-xs text-skin-muted hover:bg-skin-accent hover:text-black transition-colors"
+                              >
+                                ⏱️ 30s
+                              </button>
+                              <button
+                                onClick={() => {
+                                  soundManager.playClick();
+                                  setTimer(60);
+                                }}
+                                className="flex items-center gap-1 px-3 py-1 rounded-full border border-skin-border text-xs text-skin-muted hover:bg-skin-accent hover:text-black transition-colors"
+                              >
+                                ⏱️ 60s
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-8 flex flex-col gap-3">
+                          <button
+                            onClick={completeTurn}
+                            className="w-full py-4 bg-skin-accent text-black font-bold uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-all shadow-lg"
+                          >
+                            {gameMode === "pass"
+                              ? "跳過回合"
+                              : activePlayerId
+                              ? `完成任務 (+${gameMode === "dare" ? 2 : 1}分)`
+                              : "下一回合"}
+                          </button>
+                          {gameMode !== "punishment" && gameMode !== "pass" && (
+                            <button
+                              onClick={drawPunishment}
+                              className="w-full py-3 border border-skin-border text-skin-muted hover:text-red-500 hover:border-red-500 transition-colors uppercase text-xs tracking-widest rounded-lg"
+                            >
+                              放棄並接受懲罰
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full">
+                        {/* Roulette Section */}
+                        <div className="mb-8 relative w-full max-w-2xl mx-auto h-80 mask-fade-sides overflow-hidden bg-skin-card/30 border-y border-skin-border backdrop-blur-sm flex items-center">
+                          <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] text-skin-muted uppercase tracking-widest z-10 bg-skin-base/80 px-2 rounded-full border border-skin-border">
+                            WHO'S NEXT?
+                          </div>
+
+                          {/* Center Indicator */}
+                          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-full bg-skin-accent z-20 shadow-[0_0_10px_var(--accent-color)]"></div>
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-2 border-skin-accent rounded-xl z-20 shadow-[0_0_20px_var(--accent-color)] opacity-50 pointer-events-none"></div>
+
+                          <div
+                            className="flex items-center h-full absolute left-1/2 top-0 transition-transform cubic-bezier(0.2, 0.8, 0.2, 1)"
+                            style={{
+                              transform: `translateX(calc(-${
+                                rouletteState.targetIndex * 224 + 112
+                              }px))`, // 224px = w-48(192) + mx-4(32)
+                              transitionDuration: rouletteState.isSpinning
+                                ? "3s"
+                                : "0s",
+                              width: "max-content",
+                            }}
+                          >
+                            {rouletteState.items.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className={`w-48 h-48 flex-shrink-0 flex flex-col items-center justify-center gap-4 mx-4 p-4 rounded-xl border ${
+                                  idx === rouletteState.targetIndex
+                                    ? "bg-skin-accent text-black border-skin-accent scale-110 shadow-lg"
+                                    : "bg-skin-card border-skin-border text-skin-muted opacity-70"
+                                } transition-all duration-300`}
+                              >
+                                <span className="text-7xl">{item.icon}</span>
+                                <span className="text-xl font-bold truncate w-full text-center">
+                                  {item.text}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {turnPhase === "selected" ? (
+                          <div className="h-32 flex items-center justify-center text-skin-muted animate-pulse">
+                            正在決定命運...
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => rollNextPlayer()}
+                            disabled={turnPhase === "spinning"}
+                            className="w-full h-32 text-3xl font-bold bg-skin-accent text-black rounded-2xl shadow-lg hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed tracking-widest uppercase"
+                          >
+                            {turnPhase === "spinning"
+                              ? "抽選中..."
+                              : "抽選玩家"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {currentView === "modes" && (
+                <div className="w-full max-w-2xl mx-auto p-6 bg-skin-card rounded-xl border border-skin-border animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-8 text-center text-skin-accent">
+                    選擇遊戲模式
+                  </h2>
+                  <div className="grid grid-cols-1 gap-4">
+                    {Object.keys(playableData).map((pack) => {
+                      const isChaos = pack === "custom";
+                      const displayName = isChaos ? "混沌大亂鬥" : pack;
+                      const displayDesc = isChaos
+                        ? "包含所有分級題目 (預設 + 自定義)"
+                        : `包含 ${playableData[pack].truth.length} 真心話 / ${playableData[pack].dare.length} 大冒險`;
+
+                      return (
+                        <button
+                          key={pack}
+                          onClick={() => {
+                            soundManager.playClick();
+                            setSelectedPack(pack);
+                          }}
+                          className={`p-6 rounded-xl border transition-all flex items-center justify-between group ${
+                            selectedPack === pack
+                              ? "bg-skin-accent text-black border-skin-accent shadow-lg scale-[1.02]"
+                              : "bg-skin-base/50 border-skin-border text-skin-text hover:border-skin-accent/50"
+                          }`}
+                        >
+                          <div className="flex flex-col items-start">
+                            <span className="text-xl font-bold uppercase tracking-widest mb-1">
+                              {displayName}
+                            </span>
+                            <span
+                              className={`text-xs ${
+                                selectedPack === pack
+                                  ? "text-black/70"
+                                  : "text-skin-muted"
+                              }`}
+                            >
+                              {displayDesc}
+                            </span>
+                          </div>
+                          {selectedPack === pack && (
+                            <span className="text-2xl animate-pulse">✓</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {currentView === "settings" && (
+                <div className="w-full max-w-2xl mx-auto p-6 bg-skin-card rounded-xl border border-skin-border animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-8 text-center text-skin-accent">
+                    遊戲設定
+                  </h2>
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between pb-4 border-b border-skin-border">
+                      <h3 className="font-bold text-skin-text">主題風格</h3>
+                      <button
+                        onClick={toggleTheme}
+                        className="px-4 py-2 rounded-full bg-skin-base border border-skin-border hover:border-skin-accent transition-colors"
+                      >
+                        {theme === "royal" ? "🌙 貴族黑金" : "☀️ 活力派對"}
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 pb-4 border-b border-skin-border">
+                      <h3 className="font-bold text-skin-text">轉盤速度</h3>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-skin-muted">快</span>
+                        <input
+                          type="range"
+                          min="200"
+                          max="3000"
+                          step="100"
+                          value={spinDelay}
+                          onChange={(e) =>
+                            setSpinDelay(parseInt(e.target.value))
+                          }
+                          className="flex-1 accent-skin-accent h-2 bg-skin-border rounded-lg appearance-none cursor-pointer"
+                        />
+                        <span className="text-sm text-skin-muted">慢</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pb-4 border-b border-skin-border">
+                      <h3 className="font-bold text-skin-text">指令機率權重</h3>
+                      {[
+                        { key: "clockwise", label: "👉 下面一位" },
+                        { key: "random", label: "🎲 隨機 (依玩家權重)" },
+                        { key: "self", label: "🔄 連莊" },
+                      ].map((item) => (
+                        <div
+                          key={item.key}
+                          className="flex items-center justify-between"
+                        >
+                          <span className="text-skin-muted">{item.label}</span>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={nextPlayerRates[item.key]}
+                              onChange={(e) =>
+                                handleRateChange(item.key, e.target.value)
+                              }
+                              className="accent-skin-accent w-32 h-2 bg-skin-border rounded-lg appearance-none cursor-pointer"
+                            />
+                            <span className="w-12 text-right text-skin-text font-bold">
+                              {nextPlayerRates[item.key]}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-3 pb-4 border-b border-skin-border">
+                      <h3 className="font-bold text-skin-text">資料備份</h3>
+                      <div className="flex gap-4">
+                        <button
+                          onClick={handleExportData}
+                          className="flex-1 py-3 bg-skin-base border border-skin-border hover:border-skin-accent rounded-lg transition-colors text-sm"
+                        >
+                          📤 匯出資料 (Backup)
+                        </button>
+                        <label className="flex-1 py-3 bg-skin-base border border-skin-border hover:border-skin-accent rounded-lg transition-colors text-sm text-center cursor-pointer">
+                          📥 匯入資料 (Restore)
+                          <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleImportData}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 pt-2">
+                      <button
+                        onClick={handleRestoreDefault}
+                        className="flex-1 py-3 border border-green-500/30 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors"
+                      >
+                        ♻️ 重置所有設定
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentView === "customPack" && (
+                <div className="w-full max-w-2xl mx-auto p-6 bg-skin-card rounded-xl border border-skin-border animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-8 text-center text-skin-accent">
+                    題庫管理
+                  </h2>
+
+                  {/* Pack Selector */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-skin-muted mb-2 uppercase tracking-widest">
+                      選擇要編輯的題庫
+                    </label>
+                    <select
+                      value={managingPack}
+                      onChange={(e) => {
+                        soundManager.playClick();
+                        setManagingPack(e.target.value);
+                      }}
+                      className="w-full p-3 rounded-lg bg-skin-base border border-skin-border text-skin-text focus:border-skin-accent outline-none transition-colors"
+                    >
+                      <option value="custom">📝 自定義題目 (全模式通用)</option>
+                      {Object.keys(defaultGameData)
+                        .filter((k) => k !== "custom")
+                        .map((pack) => (
+                          <option key={pack} value={pack}>
+                            🎮 {pack}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* Truth Section */}
+                    <div className="bg-skin-base/30 p-4 rounded-lg">
+                      <h4 className="text-sm font-bold text-blue-400 mb-3 uppercase tracking-widest flex items-center gap-2">
+                        <span className="text-xl">🤫</span> 真心話 (Truth)
+                      </h4>
+                      <div className="flex gap-2 mb-4">
+                        <input
+                          type="text"
+                          value={customInputTruth}
+                          onChange={(e) => setCustomInputTruth(e.target.value)}
+                          placeholder={`新增至 ${
+                            managingPack === "custom"
+                              ? "自定義 (通用)"
+                              : managingPack
+                          }...`}
+                          className="flex-1 bg-skin-base border border-skin-border rounded-lg px-4 py-2 text-skin-text focus:border-skin-accent outline-none transition-colors"
+                        />
+                        <button
+                          onClick={() =>
+                            handleAddQuestion(
+                              managingPack,
+                              "truth",
+                              customInputTruth,
+                              setCustomInputTruth
+                            )
+                          }
+                          className="bg-blue-500/20 text-blue-400 border border-blue-500/50 px-6 py-2 rounded-lg font-bold hover:bg-blue-500/30 transition-colors"
+                        >
+                          新增
+                        </button>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                        {playableData[managingPack]?.truth.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between items-center bg-skin-card p-3 rounded-lg border border-skin-border hover:border-blue-500/30 transition-colors"
+                          >
+                            <span className="flex-1 mr-4 text-skin-text">
+                              {item.text}
+                            </span>
+                            <button
+                              onClick={() =>
+                                handleRemoveQuestion(
+                                  managingPack,
+                                  "truth",
+                                  item.id
+                                )
+                              }
+                              className="w-8 h-8 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                              title="刪除"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        {playableData[managingPack]?.truth.length === 0 && (
+                          <div className="text-center text-skin-muted py-8 border-2 border-dashed border-skin-border rounded-lg">
+                            尚無題目
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dare Section */}
+                    <div className="bg-skin-base/30 p-4 rounded-lg">
+                      <h4 className="text-sm font-bold text-red-400 mb-3 uppercase tracking-widest flex items-center gap-2">
+                        <span className="text-xl">🔥</span> 大冒險 (Dare)
+                      </h4>
+                      <div className="flex gap-2 mb-4">
+                        <input
+                          type="text"
+                          value={customInputDare}
+                          onChange={(e) => setCustomInputDare(e.target.value)}
+                          placeholder={`新增至 ${
+                            managingPack === "custom"
+                              ? "自定義 (通用)"
+                              : managingPack
+                          }...`}
+                          className="flex-1 bg-skin-base border border-skin-border rounded-lg px-4 py-2 text-skin-text focus:border-skin-accent outline-none transition-colors"
+                        />
+                        <button
+                          onClick={() =>
+                            handleAddQuestion(
+                              managingPack,
+                              "dare",
+                              customInputDare,
+                              setCustomInputDare
+                            )
+                          }
+                          className="bg-red-500/20 text-red-400 border border-red-500/50 px-6 py-2 rounded-lg font-bold hover:bg-red-500/30 transition-colors"
+                        >
+                          新增
+                        </button>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                        {playableData[managingPack]?.dare.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex justify-between items-center bg-skin-card p-3 rounded-lg border border-skin-border hover:border-red-500/30 transition-colors"
+                          >
+                            <span className="flex-1 mr-4 text-skin-text">
+                              {item.text}
+                            </span>
+                            <button
+                              onClick={() =>
+                                handleRemoveQuestion(
+                                  managingPack,
+                                  "dare",
+                                  item.id
+                                )
+                              }
+                              className="w-8 h-8 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                              title="刪除"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        {playableData[managingPack]?.dare.length === 0 && (
+                          <div className="text-center text-skin-muted py-8 border-2 border-dashed border-skin-border rounded-lg">
+                            尚無題目
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Punishment Section */}
+                    {managingPack === "custom" && (
+                      <div className="bg-skin-base/30 p-4 rounded-lg">
+                        <h4 className="text-sm font-bold text-yellow-500 mb-3 uppercase tracking-widest flex items-center gap-2">
+                          <span className="text-xl">⚡</span> 懲罰 (Punishment)
+                        </h4>
+                        <div className="flex gap-2 mb-4">
+                          <input
+                            type="text"
+                            value={customInputPunishment}
+                            onChange={(e) =>
+                              setCustomInputPunishment(e.target.value)
+                            }
+                            placeholder="輸入懲罰內容..."
+                            className="flex-1 bg-skin-base border border-skin-border rounded-lg px-4 py-2 text-skin-text focus:border-skin-accent outline-none transition-colors"
+                          />
+                          <button
+                            onClick={() => addPunishment(customInputPunishment)}
+                            className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/50 px-6 py-2 rounded-lg font-bold hover:bg-yellow-500/30 transition-colors"
+                          >
+                            新增
+                          </button>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                          {punishmentList.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex justify-between items-center bg-skin-card p-3 rounded-lg border border-skin-border hover:border-yellow-500/30 transition-colors"
+                            >
+                              <span className="flex-1 mr-4 text-skin-text">
+                                {item.text}
+                              </span>
+                              <button
+                                onClick={() => removePunishment(item.id)}
+                                className="w-8 h-8 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                          {punishmentList.length === 0 && (
+                            <div className="text-center text-skin-muted py-8 border-2 border-dashed border-skin-border rounded-lg">
+                              尚無懲罰
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-4 border-t border-skin-border flex gap-4">
+                      {managingPack !== "custom" && (
+                        <button
+                          onClick={() => handleRestorePack(managingPack)}
+                          className="flex-1 py-3 border border-green-500/30 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                          <span>♻️</span> 恢復預設值
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleClearPack(managingPack)}
+                        className="flex-1 py-3 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <span>🗑️</span> 清空此題庫
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentView === "players" && (
+                <div className="w-full max-w-2xl mx-auto p-6 bg-skin-card rounded-xl border border-skin-border animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-8 text-center text-skin-accent">
+                    玩家名單
+                  </h2>
+                  <div className="space-y-6">
+                    <form onSubmit={handleAddPlayer} className="flex gap-4">
+                      <input
+                        type="text"
+                        value={newPlayerName}
+                        onChange={(e) => setNewPlayerName(e.target.value)}
+                        placeholder="輸入新玩家名字..."
+                        className="flex-1 bg-skin-base border border-skin-border rounded-lg px-4 py-3 text-skin-text focus:border-skin-accent outline-none transition-colors"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-skin-accent text-black px-6 py-3 rounded-lg font-bold hover:brightness-110 transition-all"
+                      >
+                        新增
+                      </button>
+                    </form>
+
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                      {players.length === 0 ? (
+                        <div className="text-center py-12 text-skin-muted border-2 border-dashed border-skin-border rounded-xl">
+                          <p className="text-xl mb-2">👥</p>
+                          <p>尚無玩家資料</p>
+                        </div>
+                      ) : (
+                        players.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center gap-4 bg-skin-base/50 p-4 rounded-xl border border-skin-border hover:border-skin-accent/50 transition-colors"
+                          >
+                            <div className="w-10 h-10 rounded-full bg-skin-accent/20 flex items-center justify-center text-skin-accent font-bold">
+                              {p.name.charAt(0)}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="font-bold text-lg text-skin-text">
+                                  {p.name}
+                                </span>
+                                <span className="text-xs px-2 py-1 rounded bg-skin-card border border-skin-border text-skin-muted">
+                                  權重: {p.weight}
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0"
+                                max="10"
+                                step="1"
+                                value={p.weight}
+                                onChange={(e) =>
+                                  handlePlayerWeightChange(p.id, e.target.value)
+                                }
+                                className="w-full accent-skin-accent h-1 bg-skin-border rounded-lg appearance-none cursor-pointer"
+                              />
+                            </div>
+                            <button
+                              onClick={() => handleRemovePlayer(p.id)}
+                              className="w-10 h-10 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                              title="移除玩家"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentView === "leaderboard" && (
+                <div className="w-full max-w-2xl mx-auto p-6 bg-skin-card rounded-xl border border-skin-border animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-8 text-center text-skin-accent">
+                    排行榜
+                  </h2>
+                  <div className="space-y-4">
+                    {sortedPlayers.length === 0 ? (
+                      <div className="text-center py-12 text-skin-muted border-2 border-dashed border-skin-border rounded-xl">
+                        <p className="text-xl mb-2">🏆</p>
+                        <p>尚無戰績，快開始遊戲吧！</p>
+                      </div>
+                    ) : (
+                      sortedPlayers.map((p, index) => (
+                        <div
+                          key={p.id}
+                          className={`flex items-center p-4 rounded-xl border transition-all ${
+                            index === 0
+                              ? "bg-gradient-to-r from-yellow-500/20 to-transparent border-yellow-500/50 scale-105 shadow-lg"
+                              : "bg-skin-base/50 border-skin-border"
+                          }`}
+                        >
+                          <div className="w-12 text-2xl font-bold text-center">
+                            {index === 0
+                              ? "🥇"
+                              : index === 1
+                              ? "🥈"
+                              : index === 2
+                              ? "🥉"
+                              : `#${index + 1}`}
+                          </div>
+                          <div className="flex-1 px-4">
+                            <div className="font-bold text-xl text-skin-text mb-1">
+                              {p.name}
+                            </div>
+                            <div className="flex gap-4 text-xs text-skin-muted uppercase tracking-wider">
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                                真心話 {p.history.truth}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                                大冒險 {p.history.dare}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                                懲罰 {p.history.punishment}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-3xl font-bold text-skin-accent">
+                            {p.score}
+                            <span className="text-xs ml-1 text-skin-muted font-normal">
+                              PTS
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="mt-8 text-center text-xs text-skin-muted uppercase tracking-widest opacity-50">
+                    計分規則：真心話 +1 / 大冒險 +2 / 懲罰 +1
+                  </div>
+                </div>
+              )}
+
+              {currentView === "history" && (
+                <div className="w-full max-w-2xl mx-auto p-6 bg-skin-card rounded-xl border border-skin-border animate-fade-in">
+                  <div className="flex justify-between items-center mb-8">
+                    <h2 className="text-3xl font-serif font-bold text-skin-accent">
+                      歷史紀錄
+                    </h2>
+                    {historyLog.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm("確定要清空歷史紀錄嗎？")) {
+                            soundManager.playClick();
+                            setHistoryLog([]);
+                          }
+                        }}
+                        className="text-xs text-red-400 hover:text-red-300 border border-red-500/30 px-3 py-1 rounded-full transition-colors"
+                      >
+                        清空紀錄
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                    {historyLog.length === 0 ? (
+                      <div className="text-center py-12 text-skin-muted border-2 border-dashed border-skin-border rounded-xl">
+                        <p className="text-xl mb-2">📜</p>
+                        <p>尚無遊戲紀錄</p>
+                      </div>
+                    ) : (
+                      historyLog.map((log) => (
+                        <div
+                          key={log.id}
+                          className="p-4 rounded-xl border border-skin-border bg-skin-base/30 flex flex-col gap-2"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${
+                                  log.type === "truth"
+                                    ? "bg-blue-500/20 text-blue-400"
+                                    : log.type === "dare"
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-yellow-500/20 text-yellow-500"
+                                }`}
+                              >
+                                {log.type === "truth"
+                                  ? "真心話"
+                                  : log.type === "dare"
+                                  ? "大冒險"
+                                  : "懲罰"}
+                              </span>
+                              <span className="font-bold text-skin-text">
+                                {log.playerName}
+                              </span>
+                            </div>
+                            <span className="text-xs text-skin-muted">
+                              {log.time}
+                            </span>
+                          </div>
+                          <p className="text-skin-muted text-sm pl-1">
+                            {log.text}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </main>
+            <footer className="fixed bottom-4 w-full text-center text-skin-muted text-[10px] tracking-[0.5em] opacity-50">
+              DESIGNED FOR IMMERSIVE SOCIAL EXPERIENCE
+            </footer>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
