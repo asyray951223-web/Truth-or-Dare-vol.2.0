@@ -147,6 +147,42 @@
           transparent
         );
       }
+
+      /* 3D 骰子樣式 */
+      .dice-scene {
+        perspective: 600px;
+        width: 200px;
+        height: 200px;
+      }
+      .dice-cube {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        transform-style: preserve-3d;
+        transition: transform 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .dice-face {
+        position: absolute;
+        width: 200px;
+        height: 200px;
+        background: var(--card-bg);
+        border: 4px solid var(--accent-color);
+        border-radius: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.1);
+        backface-visibility: hidden; /* 隱藏背面以避免視覺干擾 */
+      }
+      /* 確保背面不透明，避免穿透 */
+      .dice-face::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--card-bg);
+        border-radius: 26px;
+        z-index: -1;
+      }
     </style>
   </head>
   <body>
@@ -251,6 +287,36 @@
           this.playTone(880, "sawtooth", 0.5, 0.1);
           setTimeout(() => this.playTone(880, "sawtooth", 0.5, 0.1), 600);
         },
+        playExplosion: function () {
+          if (this.muted) return;
+          if (!this.ctx) this.init();
+          const t = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(150, t);
+          osc.frequency.exponentialRampToValueAtTime(0.01, t + 1.5);
+          gain.gain.setValueAtTime(1, t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 1.5);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(t + 1.5);
+
+          // Noise texture
+          for (let i = 0; i < 5; i++) {
+            const osc2 = this.ctx.createOscillator();
+            const gain2 = this.ctx.createGain();
+            osc2.type = "square";
+            osc2.frequency.value = Math.random() * 500 + 50;
+            gain2.gain.setValueAtTime(0.1, t);
+            gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+            osc2.connect(gain2);
+            gain2.connect(this.ctx.destination);
+            osc2.start();
+            osc2.stop(t + 0.5);
+          }
+        },
       };
 
       function App() {
@@ -298,6 +364,23 @@
           targetIndex: 0,
           duration: 5000,
         });
+
+        // 骰子狀態
+        const [diceState, setDiceState] = useState({
+          value: 1,
+          rotation: { x: 0, y: 0 },
+          isRolling: false,
+        });
+
+        // 炸彈模式狀態
+        const [bombState, setBombState] = useState({
+          isActive: false,
+          isExploded: false,
+          timeLeft: 0,
+          currentPlayerIdx: 0,
+          currentTask: null,
+        });
+        const [bombDuration, setBombDuration] = useState(60);
 
         // 轉盤速度
         const [spinDelay, setSpinDelay] = useState(() =>
@@ -367,6 +450,24 @@
           };
           setPlayers([...players, newPlayer]);
           setNewPlayerName("");
+        };
+
+        const handleQuickSetup = () => {
+          soundManager.playClick();
+          if (
+            players.length > 0 &&
+            !window.confirm("這將會覆蓋目前的玩家名單，確定要執行嗎？")
+          ) {
+            return;
+          }
+          const quickPlayers = Array.from({ length: 4 }, (_, i) => ({
+            id: Date.now() + i,
+            name: `玩家${i + 1}`,
+            weight: 5,
+            score: 0,
+            history: { truth: 0, dare: 0, punishment: 0 },
+          }));
+          setPlayers(quickPlayers);
         };
 
         const handleRemovePlayer = (id) => {
@@ -692,6 +793,150 @@
           setGameMode(null);
           setActivePlayerId(null);
           setTurnPhase("idle");
+        };
+
+        const rollDice = () => {
+          if (diceState.isRolling) return;
+          soundManager.playClick();
+
+          const target = Math.floor(Math.random() * 6) + 1;
+
+          // 定義每個點數對應的旋轉角度 (Base rotations)
+          // 1: (0, 0), 2: (0, -90), 3: (0, 180), 4: (0, 90), 5: (-90, 0), 6: (90, 0)
+          let baseX = 0,
+            baseY = 0;
+          switch (target) {
+            case 1:
+              baseX = 0;
+              baseY = 0;
+              break;
+            case 2:
+              baseX = 0;
+              baseY = -90;
+              break;
+            case 3:
+              baseX = 0;
+              baseY = 180;
+              break;
+            case 4:
+              baseX = 0;
+              baseY = 90;
+              break;
+            case 5:
+              baseX = -90;
+              baseY = 0;
+              break;
+            case 6:
+              baseX = 90;
+              baseY = 0;
+              break;
+          }
+
+          // 增加隨機圈數 (至少 2 圈，至多 4 圈)
+          const spins = 2 + Math.floor(Math.random() * 3);
+          const extraX = 360 * spins;
+          const extraY = 360 * spins;
+
+          // 計算累積旋轉角度，確保動畫順暢連接
+          const currentX = diceState.rotation.x;
+          const currentY = diceState.rotation.y;
+
+          // 算法：當前角度 + (補足到360的倍數) + 目標基礎角度 + 額外圈數
+          const modX = ((currentX % 360) + 360) % 360;
+          const modY = ((currentY % 360) + 360) % 360;
+
+          const newX = currentX + (360 - modX) + baseX + extraX;
+          const newY = currentY + (360 - modY) + baseY + extraY;
+
+          setDiceState({
+            value: target,
+            rotation: { x: newX, y: newY },
+            isRolling: true,
+          });
+
+          // 播放滾動音效
+          let ticks = 0;
+          const interval = setInterval(() => {
+            soundManager.playTick();
+            ticks++;
+            if (ticks > 8) clearInterval(interval);
+          }, 100);
+
+          setTimeout(() => {
+            setDiceState((prev) => ({ ...prev, isRolling: false }));
+            soundManager.playWin();
+          }, 1000);
+        };
+
+        // 炸彈模式邏輯
+        const startBombGame = () => {
+          if (players.length < 2) {
+            alert("炸彈模式至少需要 2 位玩家！");
+            return;
+          }
+          soundManager.playClick();
+          setBombState({
+            isActive: true,
+            isExploded: false,
+            timeLeft: bombDuration,
+            currentPlayerIdx: Math.floor(Math.random() * players.length),
+            currentTask: null,
+          });
+        };
+
+        const drawBombTask = () => {
+          soundManager.playClick();
+          // 隨機抽取一個題目 (混合真心話與大冒險)
+          let deck = [];
+          if (selectedPack === "custom") {
+            Object.values(playableData).forEach((pack) => {
+              if (pack.truth) deck = [...deck, ...pack.truth];
+              if (pack.dare) deck = [...deck, ...pack.dare];
+            });
+          } else {
+            if (playableData[selectedPack]) {
+              deck = [
+                ...playableData[selectedPack].truth,
+                ...playableData[selectedPack].dare,
+              ];
+            }
+            if (playableData.custom) {
+              deck = [
+                ...deck,
+                ...playableData.custom.truth,
+                ...playableData.custom.dare,
+              ];
+            }
+          }
+
+          if (deck.length === 0) {
+            setBombState((prev) => ({
+              ...prev,
+              currentTask: { text: "快傳給下一個人！(無題目)" },
+            }));
+            return;
+          }
+
+          const randomCard = deck[Math.floor(Math.random() * deck.length)];
+          setBombState((prev) => ({ ...prev, currentTask: randomCard }));
+        };
+
+        const passBomb = () => {
+          soundManager.playClick();
+          setBombState((prev) => ({
+            ...prev,
+            currentPlayerIdx: (prev.currentPlayerIdx + 1) % players.length,
+            currentTask: null,
+          }));
+        };
+
+        const handleBombPunishment = () => {
+          soundManager.playClick();
+          const randomIdx = Math.floor(Math.random() * punishmentList.length);
+          setBombState((prev) => ({
+            ...prev,
+            currentTask: punishmentList[randomIdx], // 借用 currentTask 顯示懲罰
+          }));
         };
 
         const handleAddQuestion = (pack, type, text, setText) => {
@@ -1159,6 +1404,42 @@
           };
         }, [rouletteState.isSpinning]);
 
+        // 炸彈計時器
+        useEffect(() => {
+          let interval;
+          if (bombState.isActive && bombState.timeLeft > 0) {
+            interval = setInterval(() => {
+              setBombState((prev) => {
+                const newTime = prev.timeLeft - 0.1;
+
+                // 音效邏輯
+                if (newTime <= 0) {
+                  soundManager.playExplosion();
+                  return {
+                    ...prev,
+                    isActive: false,
+                    isExploded: true,
+                    timeLeft: 0,
+                  };
+                }
+
+                // 根據剩餘時間調整滴答聲頻率
+                const tickInterval = prev.timeLeft > 10 ? 1 : 0.2;
+                const shouldTick =
+                  Math.floor(prev.timeLeft / tickInterval) !==
+                  Math.floor(newTime / tickInterval);
+
+                if (shouldTick) {
+                  soundManager.playTick();
+                }
+
+                return { ...prev, timeLeft: newTime };
+              });
+            }, 100);
+          }
+          return () => clearInterval(interval);
+        }, [bombState.isActive]);
+
         const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
         return (
@@ -1224,6 +1505,42 @@
                 >
                   <span className="text-2xl">🎮</span>
                   <span className="font-bold tracking-widest">遊戲模式</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("bomb");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "bomb"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">💣</span>
+                  <span className="font-bold tracking-widest">炸彈模式</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
+                    setCurrentView("dice");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "dice"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">🎲</span>
+                  <span className="font-bold tracking-widest">擲骰子</span>
                 </button>
               </div>
 
@@ -1526,6 +1843,260 @@
                     )}
                   </div>
                 </>
+              )}
+
+              {currentView === "bomb" && (
+                <div className="w-full max-w-2xl mx-auto flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-8 text-center text-skin-accent">
+                    TIME BOMB
+                  </h2>
+
+                  {!bombState.isActive && !bombState.isExploded ? (
+                    <div className="text-center space-y-8">
+                      <div className="text-9xl animate-bounce">💣</div>
+                      <p className="text-skin-muted">
+                        手機將變身為定時炸彈！
+                        <br />
+                        回答問題後傳給下一位玩家，
+                        <br />
+                        時間到時持有手機的人就輸了！
+                      </p>
+
+                      <div className="bg-skin-card p-4 rounded-xl border border-skin-border w-full max-w-xs mx-auto">
+                        <label className="block text-sm font-bold text-skin-muted mb-2 uppercase tracking-widest">
+                          爆炸倒數:{" "}
+                          <span className="text-skin-accent text-lg">
+                            {bombDuration}
+                          </span>{" "}
+                          秒
+                        </label>
+                        <input
+                          type="range"
+                          min="10"
+                          max="180"
+                          step="5"
+                          value={bombDuration}
+                          onChange={(e) =>
+                            setBombDuration(parseInt(e.target.value))
+                          }
+                          className="w-full accent-skin-accent h-2 bg-skin-border rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <button
+                        onClick={startBombGame}
+                        className="px-12 py-4 bg-skin-accent text-black font-bold text-xl rounded-xl shadow-lg hover:brightness-110 transition-all uppercase tracking-widest"
+                      >
+                        開始遊戲
+                      </button>
+                    </div>
+                  ) : bombState.isExploded ? (
+                    <div className="text-center space-y-8 animate-pulse">
+                      <div className="text-9xl">💥</div>
+                      <h3 className="text-4xl font-bold text-rose-500">
+                        BOOM!
+                      </h3>
+                      <p className="text-2xl text-skin-text">
+                        <span className="font-bold text-skin-accent">
+                          {players[bombState.currentPlayerIdx]?.name}
+                        </span>{" "}
+                        爆炸了！
+                      </p>
+
+                      {bombState.currentTask ? (
+                        <div className="p-6 bg-skin-card border border-rose-500 rounded-xl shadow-[0_0_30px_rgba(244,63,94,0.3)]">
+                          <h4 className="text-rose-500 font-bold mb-2">
+                            懲罰內容
+                          </h4>
+                          <p className="text-xl">
+                            {bombState.currentTask.text}
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleBombPunishment}
+                          className="px-8 py-3 border border-rose-500 text-rose-500 font-bold rounded-lg hover:bg-rose-500 hover:text-white transition-all"
+                        >
+                          抽取懲罰
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() =>
+                          setBombState((prev) => ({
+                            ...prev,
+                            isExploded: false,
+                            currentTask: null,
+                          }))
+                        }
+                        className="block mx-auto mt-8 text-skin-muted hover:text-skin-text underline"
+                      >
+                        重新開始
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full max-w-md text-center space-y-8">
+                      <div
+                        className={`text-9xl font-mono font-bold transition-transform duration-100 ${
+                          bombState.timeLeft < 10
+                            ? "animate-ping text-red-500"
+                            : "animate-pulse text-skin-accent"
+                        }`}
+                      >
+                        {Math.ceil(bombState.timeLeft)}
+                      </div>
+
+                      <div className="bg-skin-card p-6 rounded-xl border border-skin-border">
+                        <p className="text-sm text-skin-muted uppercase tracking-widest mb-2">
+                          Current Holder
+                        </p>
+                        <h3 className="text-3xl font-bold text-skin-accent mb-6">
+                          {players[bombState.currentPlayerIdx]?.name}
+                        </h3>
+
+                        {bombState.currentTask ? (
+                          <div className="space-y-6">
+                            <p className="text-xl font-bold min-h-[80px] flex items-center justify-center">
+                              {bombState.currentTask.text}
+                            </p>
+                            <button
+                              onClick={passBomb}
+                              className="w-full py-4 bg-green-500 text-black font-bold text-xl rounded-xl hover:brightness-110 transition-all shadow-lg"
+                            >
+                              ✅ 完成並傳遞！
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={drawBombTask}
+                            className="w-full py-4 bg-skin-accent text-black font-bold text-xl rounded-xl hover:brightness-110 transition-all shadow-lg"
+                          >
+                            🃏 抽取任務
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-skin-muted animate-pulse">
+                        {bombState.timeLeft < 10
+                          ? "快一點！時間快到了！"
+                          : "時間正在倒數..."}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {currentView === "dice" && (
+                <div className="w-full max-w-2xl mx-auto flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-12 text-center text-skin-accent">
+                    DICE MODE
+                  </h2>
+
+                  <div className="dice-scene mb-16">
+                    <div
+                      className="dice-cube"
+                      style={{
+                        transform: `rotateX(${diceState.rotation.x}deg) rotateY(${diceState.rotation.y}deg)`,
+                      }}
+                    >
+                      {/* Face 1 (Front) */}
+                      <div
+                        className="dice-face"
+                        style={{ transform: "rotateY(0deg) translateZ(100px)" }}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-skin-text"></div>
+                      </div>
+
+                      {/* Face 2 (Right) */}
+                      <div
+                        className="dice-face"
+                        style={{
+                          transform: "rotateY(90deg) translateZ(100px)",
+                        }}
+                      >
+                        <div className="flex flex-col justify-between h-24 w-24">
+                          <div className="w-6 h-6 rounded-full bg-skin-text self-start"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text self-end"></div>
+                        </div>
+                      </div>
+
+                      {/* Face 3 (Back) */}
+                      <div
+                        className="dice-face"
+                        style={{
+                          transform: "rotateY(180deg) translateZ(100px)",
+                        }}
+                      >
+                        <div className="flex flex-col justify-between h-24 w-24">
+                          <div className="w-6 h-6 rounded-full bg-skin-text self-start"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text self-center"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text self-end"></div>
+                        </div>
+                      </div>
+
+                      {/* Face 4 (Left) */}
+                      <div
+                        className="dice-face"
+                        style={{
+                          transform: "rotateY(-90deg) translateZ(100px)",
+                        }}
+                      >
+                        <div className="grid grid-cols-2 gap-8">
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                        </div>
+                      </div>
+
+                      {/* Face 5 (Top) */}
+                      <div
+                        className="dice-face"
+                        style={{
+                          transform: "rotateX(90deg) translateZ(100px)",
+                        }}
+                      >
+                        <div className="grid grid-cols-3 grid-rows-3 w-24 h-24">
+                          <div className="w-6 h-6 rounded-full bg-skin-text col-start-1 row-start-1"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text col-start-3 row-start-1"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text col-start-2 row-start-2"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text col-start-1 row-start-3"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text col-start-3 row-start-3"></div>
+                        </div>
+                      </div>
+
+                      {/* Face 6 (Bottom) */}
+                      <div
+                        className="dice-face"
+                        style={{
+                          transform: "rotateX(-90deg) translateZ(100px)",
+                        }}
+                      >
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                          <div className="w-6 h-6 rounded-full bg-skin-text"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={rollDice}
+                    disabled={diceState.isRolling}
+                    className="px-12 py-4 bg-skin-accent text-black font-bold text-xl rounded-xl shadow-lg hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest"
+                  >
+                    {diceState.isRolling ? "Rolling..." : "ROLL DICE"}
+                  </button>
+
+                  {!diceState.isRolling && (
+                    <div className="mt-8 text-6xl font-bold text-skin-text animate-fade-in">
+                      {diceState.value}
+                    </div>
+                  )}
+                </div>
               )}
 
               {currentView === "modes" && (
@@ -1998,6 +2569,15 @@
                         新增
                       </button>
                     </form>
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleQuickSetup}
+                        className="text-sm text-skin-accent hover:text-skin-text transition-colors flex items-center gap-1 border border-skin-accent/30 px-3 py-1 rounded-lg hover:bg-skin-accent/10"
+                      >
+                        <span>⚡</span> 快速生成 4 位玩家
+                      </button>
+                    </div>
 
                     <div className="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
                       {players.length === 0 ? (
