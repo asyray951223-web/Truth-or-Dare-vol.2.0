@@ -35,6 +35,9 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     <script src="data.js"></script>
     <script src="data_casual.js"></script>
@@ -206,6 +209,25 @@
         });
       }
 
+      // === Firebase 設定 (請在此填入您的 Firebase Console 專案設定) ===
+      const firebaseConfig = {
+        apiKey: "AIzaSyDApgPl0ZoLuY6GHd16t5d4Byc5mIpISG4",
+        authDomain: "truth-or-dare-v2-0.firebaseapp.com",
+        databaseURL: "https://truth-or-dare-v2-0-default-rtdb.firebaseio.com",
+        projectId: "truth-or-dare-v2-0",
+        storageBucket: "truth-or-dare-v2-0.firebasestorage.app",
+        messagingSenderId: "102129762006",
+        appId: "1:102129762006:web:1a2e1108b62236244e5377",
+        measurementId: "G-LMBEVVHDL0",
+      };
+
+      // 初始化 Firebase
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      const db = firebase.database();
+      const auth = firebase.auth();
+
       const { useState, useEffect } = React;
 
       // === 資料庫 (Data) ===
@@ -354,6 +376,13 @@
         const [isNavOpen, setIsNavOpen] = useState(false);
         const [currentView, setCurrentView] = useState("game");
 
+        // === 多人連線狀態 ===
+        const [roomId, setRoomId] = useState("");
+        const [isOnline, setIsOnline] = useState(false);
+        const [myUid, setMyUid] = useState(null);
+        const [hostId, setHostId] = useState(null);
+        const isRemoteUpdate = React.useRef(false); // 防止無限迴圈更新
+
         const isFirstMount = React.useRef(true);
         const rouletteContainerRef = React.useRef(null);
 
@@ -434,6 +463,97 @@
         const [customInputPunishment, setCustomInputPunishment] = useState("");
 
         const [managingPack, setManagingPack] = useState("custom");
+
+        // === Firebase Auth (匿名登入) ===
+        useEffect(() => {
+          auth
+            .signInAnonymously()
+            .then((cred) => {
+              setMyUid(cred.user.uid);
+            })
+            .catch((error) => console.error("Auth Error:", error));
+        }, []);
+
+        // === Firebase 連線邏輯 (監聽) ===
+        useEffect(() => {
+          if (!isOnline || !roomId) return;
+
+          const roomRef = db.ref(`rooms/${roomId}`);
+
+          const handleData = (snapshot) => {
+            const remoteState = snapshot.val();
+            if (!remoteState) return;
+
+            // 收到遠端狀態，更新本地狀態
+            isRemoteUpdate.current = true;
+
+            if (remoteState.players) setPlayers(remoteState.players);
+            if (remoteState.currentCard !== undefined)
+              setCurrentCard(remoteState.currentCard);
+            if (remoteState.activePlayerId !== undefined)
+              setActivePlayerId(remoteState.activePlayerId);
+            if (remoteState.gameMode !== undefined)
+              setGameMode(remoteState.gameMode);
+            if (remoteState.turnPhase) setTurnPhase(remoteState.turnPhase);
+            if (remoteState.nextInstruction)
+              setNextInstruction(remoteState.nextInstruction);
+            if (remoteState.rouletteState)
+              setRouletteState(remoteState.rouletteState);
+            if (remoteState.diceState) setDiceState(remoteState.diceState);
+            if (remoteState.bombState) setBombState(remoteState.bombState);
+            if (remoteState.hostId) setHostId(remoteState.hostId);
+
+            // 稍微延遲後重置旗標，避免立即觸發回傳
+            setTimeout(() => {
+              isRemoteUpdate.current = false;
+            }, 100);
+          };
+
+          roomRef.on("value", handleData);
+
+          return () => roomRef.off("value", handleData);
+        }, [isOnline, roomId]);
+
+        // === Firebase 同步邏輯 (寫入) ===
+        // 當本地關鍵狀態改變時，寫入資料庫 (如果是遠端更新則不寫入)
+        useEffect(() => {
+          if (!isOnline || !roomId || isRemoteUpdate.current) return;
+
+          // 如果目前沒有房主，且我有 ID，則我成為房主
+          let currentHostId = hostId;
+          if (!currentHostId && myUid) {
+            currentHostId = myUid;
+            setHostId(myUid);
+          }
+
+          const stateToSync = {
+            players,
+            currentCard,
+            activePlayerId,
+            gameMode,
+            turnPhase,
+            nextInstruction,
+            rouletteState,
+            diceState,
+            bombState,
+            hostId: currentHostId,
+          };
+
+          db.ref(`rooms/${roomId}`).set(stateToSync);
+        }, [
+          players,
+          currentCard,
+          activePlayerId,
+          gameMode,
+          turnPhase,
+          nextInstruction,
+          rouletteState,
+          diceState,
+          bombState,
+          isOnline,
+          hostId,
+          roomId,
+        ]);
 
         // === 核心邏輯 ===
 
@@ -1440,6 +1560,9 @@
           return () => clearInterval(interval);
         }, [bombState.isActive]);
 
+        // 權限檢查：是否為房主或單機模式
+        const isHost = !isOnline || (hostId && myUid && hostId === myUid);
+
         const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
         return (
@@ -1548,6 +1671,24 @@
                 <button
                   onClick={() => {
                     soundManager.playClick();
+                    setCurrentView("online");
+                    setIsNavOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
+                    currentView === "online"
+                      ? "bg-skin-accent text-black"
+                      : "text-skin-muted hover:bg-skin-base hover:text-skin-text"
+                  }`}
+                >
+                  <span className="text-2xl">🌐</span>
+                  <span className="font-bold tracking-widest">多人連線</span>
+                </button>
+              </div>
+
+              <div className="relative w-full px-4">
+                <button
+                  onClick={() => {
+                    soundManager.playClick();
                     setCurrentView("players");
                     setIsNavOpen(false);
                   }}
@@ -1646,6 +1787,11 @@
                     <div className="text-skin-muted text-sm uppercase tracking-[0.3em] mb-8">
                       Current Mode:{" "}
                       <span className="text-skin-accent">{selectedPack}</span>
+                      {isOnline && (
+                        <span className="ml-4 text-green-400 border border-green-500/30 px-2 py-1 rounded text-xs animate-pulse">
+                          ● ONLINE: {roomId}
+                        </span>
+                      )}
                     </div>
                   </header>
 
@@ -2096,6 +2242,70 @@
                       {diceState.value}
                     </div>
                   )}
+                </div>
+              )}
+
+              {currentView === "online" && (
+                <div className="w-full max-w-2xl mx-auto p-6 bg-skin-card rounded-xl border border-skin-border animate-fade-in">
+                  <h2 className="text-3xl font-serif font-bold mb-8 text-center text-skin-accent">
+                    多人連線大廳
+                  </h2>
+                  <div className="space-y-6 text-center">
+                    <div className="text-6xl mb-4">🌐</div>
+                    <p className="text-skin-muted">
+                      輸入相同的房間號碼，即可與朋友同步遊戲狀態！
+                      <br />
+                      (建議由一人操作，其他人觀看)
+                    </p>
+
+                    <div className="flex flex-col gap-4 max-w-xs mx-auto">
+                      <input
+                        type="text"
+                        value={roomId}
+                        onChange={(e) => setRoomId(e.target.value)}
+                        placeholder="輸入房間號碼 (例如: 1234)"
+                        className="bg-skin-base border border-skin-border rounded-lg px-4 py-3 text-skin-text focus:border-skin-accent outline-none text-center text-xl tracking-widest uppercase"
+                        disabled={isOnline}
+                      />
+
+                      {!isOnline ? (
+                        <button
+                          onClick={() => {
+                            if (!roomId.trim()) return alert("請輸入房間號碼");
+                            soundManager.playClick();
+                            setIsOnline(true);
+                            alert(`已加入房間：${roomId}，現在狀態將會同步！`);
+                          }}
+                          className="bg-skin-accent text-black px-6 py-3 rounded-lg font-bold hover:brightness-110 transition-all"
+                        >
+                          加入房間
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            soundManager.playClick();
+                            setIsOnline(false);
+                            setRoomId("");
+                            window.location.reload(); // 簡單重置
+                          }}
+                          className="bg-red-500/20 text-red-400 border border-red-500/50 px-6 py-3 rounded-lg font-bold hover:bg-red-500/30 transition-all"
+                        >
+                          斷開連線
+                        </button>
+                      )}
+                    </div>
+
+                    {isOnline && (
+                      <div className="mt-8 p-4 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 animate-pulse">
+                        連線中... 任何操作都會同步給房間內的其他玩家
+                      </div>
+                    )}
+                    {isOnline && isHost && (
+                      <div className="text-xs text-skin-accent uppercase tracking-widest mt-2">
+                        👑 你是房主，擁有管理權限
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -2554,29 +2764,33 @@
                     玩家名單
                   </h2>
                   <div className="space-y-6">
-                    <form onSubmit={handleAddPlayer} className="flex gap-4">
-                      <input
-                        type="text"
-                        value={newPlayerName}
-                        onChange={(e) => setNewPlayerName(e.target.value)}
-                        placeholder="輸入新玩家名字..."
-                        className="flex-1 bg-skin-base border border-skin-border rounded-lg px-4 py-3 text-skin-text focus:border-skin-accent outline-none transition-colors"
-                      />
-                      <button
-                        type="submit"
-                        className="bg-skin-accent text-black px-6 py-3 rounded-lg font-bold hover:brightness-110 transition-all"
-                      >
-                        新增
-                      </button>
-                    </form>
+                    {isHost && (
+                      <form onSubmit={handleAddPlayer} className="flex gap-4">
+                        <input
+                          type="text"
+                          value={newPlayerName}
+                          onChange={(e) => setNewPlayerName(e.target.value)}
+                          placeholder="輸入新玩家名字..."
+                          className="flex-1 bg-skin-base border border-skin-border rounded-lg px-4 py-3 text-skin-text focus:border-skin-accent outline-none transition-colors"
+                        />
+                        <button
+                          type="submit"
+                          className="bg-skin-accent text-black px-6 py-3 rounded-lg font-bold hover:brightness-110 transition-all"
+                        >
+                          新增
+                        </button>
+                      </form>
+                    )}
 
                     <div className="flex justify-end">
-                      <button
-                        onClick={handleQuickSetup}
-                        className="text-sm text-skin-accent hover:text-skin-text transition-colors flex items-center gap-1 border border-skin-accent/30 px-3 py-1 rounded-lg hover:bg-skin-accent/10"
-                      >
-                        <span>⚡</span> 快速生成 4 位玩家
-                      </button>
+                      {isHost && (
+                        <button
+                          onClick={handleQuickSetup}
+                          className="text-sm text-skin-accent hover:text-skin-text transition-colors flex items-center gap-1 border border-skin-accent/30 px-3 py-1 rounded-lg hover:bg-skin-accent/10"
+                        >
+                          <span>⚡</span> 快速生成 4 位玩家
+                        </button>
+                      )}
                     </div>
 
                     <div className="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
@@ -2615,13 +2829,15 @@
                                 className="w-full accent-skin-accent h-1 bg-skin-border rounded-lg appearance-none cursor-pointer"
                               />
                             </div>
-                            <button
-                              onClick={() => handleRemovePlayer(p.id)}
-                              className="w-10 h-10 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                              title="移除玩家"
-                            >
-                              ✕
-                            </button>
+                            {isHost && (
+                              <button
+                                onClick={() => handleRemovePlayer(p.id)}
+                                className="w-10 h-10 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                                title="踢出玩家"
+                              >
+                                ✕
+                              </button>
+                            )}
                           </div>
                         ))
                       )}
