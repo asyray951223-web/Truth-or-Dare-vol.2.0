@@ -212,14 +212,15 @@
 
       // === Firebase 設定 (請在此填入您的 Firebase Console 專案設定) ===
       const firebaseConfig = {
-        apiKey: "AIzaSyDApgPl0ZoLuY6GHd16t5d4Byc5mIpISG4",
-        authDomain: "truth-or-dare-v2-0.firebaseapp.com",
-        databaseURL: "https://truth-or-dare-v2-0-default-rtdb.firebaseio.com",
-        projectId: "truth-or-dare-v2-0",
-        storageBucket: "truth-or-dare-v2-0.firebasestorage.app",
-        messagingSenderId: "102129762006",
-        appId: "1:102129762006:web:1a2e1108b62236244e5377",
-        measurementId: "G-LMBEVVHDL0",
+        apiKey: "AIzaSyBi-VIoa3swbrQqoeik9y5FtOHheJ3x8KA",
+        authDomain: "truth-or-dare-online-v2.firebaseapp.com",
+        databaseURL:
+          "https://truth-or-dare-online-v2-default-rtdb.firebaseio.com",
+        projectId: "truth-or-dare-online-v2",
+        storageBucket: "truth-or-dare-online-v2.firebasestorage.app",
+        messagingSenderId: "144397063274",
+        appId: "1:144397063274:web:5c9e0d2161a1fcdd296613",
+        measurementId: "G-86LC0DZ2RS",
       };
 
       // 初始化 Firebase
@@ -547,6 +548,27 @@
             }
             if (remoteState.bombState) setBombState(remoteState.bombState);
 
+            // === 同步歷史紀錄 ===
+            if (remoteState.historyLog) {
+              const h = remoteState.historyLog;
+              setHistoryLog(Array.isArray(h) ? h : Object.values(h));
+            }
+
+            // === 同步自定義題庫 ===
+            if (remoteState.customPack) {
+              const c = remoteState.customPack;
+              // 確保陣列格式，避免 Firebase 物件轉換導致錯誤
+              if (c.truth && !Array.isArray(c.truth))
+                c.truth = Object.values(c.truth);
+              if (c.dare && !Array.isArray(c.dare))
+                c.dare = Object.values(c.dare);
+
+              setPlayableData((prev) => ({
+                ...prev,
+                custom: c,
+              }));
+            }
+
             // 同步房主 ID，若遠端無房主(舊資料)且我有 ID，則自動補位
             if (remoteState.hostId) {
               setHostId(remoteState.hostId);
@@ -611,6 +633,8 @@
             diceState,
             bombState,
             hostId,
+            historyLog,
+            customPack: playableData.custom,
           };
 
           db.ref(`rooms/${roomId}`).set(stateToSync);
@@ -627,6 +651,8 @@
           isOnline,
           hostId,
           roomId,
+          historyLog,
+          playableData,
         ]);
 
         // === 核心邏輯 ===
@@ -2341,10 +2367,32 @@
                   {!isOnline ? (
                     <div className="space-y-12 text-center">
                       {connectionError && (
-                        <div className="p-4 bg-red-500/20 border border-red-500 text-red-400 rounded-lg text-sm mb-6">
-                          連線失敗: {connectionError}
-                          <br />
-                          請確認網路連線或 Firebase 設定 (需啟用匿名登入)
+                        <div className="p-4 bg-red-500/20 border border-red-500 text-red-400 rounded-lg text-sm mb-6 flex flex-col gap-2">
+                          <div className="font-bold">
+                            連線失敗 ({connectionError})
+                          </div>
+                          <div className="text-xs text-left mx-auto max-w-xs space-y-1">
+                            <p>請檢查 Firebase Console 設定：</p>
+                            <ol className="list-decimal pl-4 space-y-1">
+                              <li>
+                                進入 <strong>Authentication</strong> &gt;{" "}
+                                <strong>Sign-in method</strong>
+                              </li>
+                              <li>
+                                確認已啟用 <strong>匿名 (Anonymous)</strong>{" "}
+                                登入
+                              </li>
+                              <li>
+                                若這是複製的專案，請建立自己的專案並更新 Config
+                              </li>
+                            </ol>
+                          </div>
+                          <button
+                            onClick={() => window.location.reload()}
+                            className="mt-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 rounded text-red-200 transition-colors"
+                          >
+                            重試連線
+                          </button>
                         </div>
                       )}
                       {/* Create Section */}
