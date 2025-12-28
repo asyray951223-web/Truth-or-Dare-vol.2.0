@@ -2990,70 +2990,73 @@ function App() {
                     <p>尚無玩家資料</p>
                   </div>
                 ) : (
-                  players.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center gap-4 bg-skin-base/50 p-4 rounded-xl border border-skin-border hover:border-skin-accent/50 transition-colors"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-skin-accent/20 flex items-center justify-center text-skin-accent font-bold relative">
-                        {(p.name || "?").charAt(0)}
-                        {isOnline && p.uid && onlineUsers[p.uid] && (
-                          <span
-                            className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-skin-card rounded-full shadow-[0_0_5px_rgba(34,197,94,0.8)]"
-                            title="在線"
-                          ></span>
+                  players.map((p) => {
+                    if (!p) return null;
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex items-center gap-4 bg-skin-base/50 p-4 rounded-xl border border-skin-border hover:border-skin-accent/50 transition-colors"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-skin-accent/20 flex items-center justify-center text-skin-accent font-bold relative">
+                          {String(p.name || "?").charAt(0)}
+                          {isOnline && p.uid && onlineUsers[p.uid] && (
+                            <span
+                              className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-skin-card rounded-full shadow-[0_0_5px_rgba(34,197,94,0.8)]"
+                              title="在線"
+                            ></span>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-lg text-skin-text">
+                                {p.name || "未知玩家"}
+                              </span>
+                              {isHost && (
+                                <button
+                                  onClick={() =>
+                                    handleEditPlayerName(p.id, p.name)
+                                  }
+                                  className="text-xs opacity-50 hover:opacity-100 transition-opacity"
+                                  title="修改名稱"
+                                >
+                                  ✏️
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-xs px-2 py-1 rounded bg-skin-card border border-skin-border text-skin-muted">
+                              權重: {p.weight}
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="10"
+                            step="1"
+                            value={p.weight || 0}
+                            disabled={!isHost}
+                            onChange={(e) =>
+                              handlePlayerWeightChange(p.id, e.target.value)
+                            }
+                            className={`w-full accent-skin-accent h-1 bg-skin-border rounded-lg appearance-none ${
+                              isHost
+                                ? "cursor-pointer"
+                                : "cursor-not-allowed opacity-50"
+                            }`}
+                          />
+                        </div>
+                        {isHost && (
+                          <button
+                            onClick={() => handleRemovePlayer(p.id)}
+                            className="w-10 h-10 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                            title="踢出玩家"
+                          >
+                            ✕
+                          </button>
                         )}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg text-skin-text">
-                              {p.name || "未知玩家"}
-                            </span>
-                            {isHost && (
-                              <button
-                                onClick={() =>
-                                  handleEditPlayerName(p.id, p.name)
-                                }
-                                className="text-xs opacity-50 hover:opacity-100 transition-opacity"
-                                title="修改名稱"
-                              >
-                                ✏️
-                              </button>
-                            )}
-                          </div>
-                          <span className="text-xs px-2 py-1 rounded bg-skin-card border border-skin-border text-skin-muted">
-                            權重: {p.weight}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="10"
-                          step="1"
-                          value={p.weight}
-                          disabled={!isHost}
-                          onChange={(e) =>
-                            handlePlayerWeightChange(p.id, e.target.value)
-                          }
-                          className={`w-full accent-skin-accent h-1 bg-skin-border rounded-lg appearance-none ${
-                            isHost
-                              ? "cursor-pointer"
-                              : "cursor-not-allowed opacity-50"
-                          }`}
-                        />
-                      </div>
-                      {isHost && (
-                        <button
-                          onClick={() => handleRemovePlayer(p.id)}
-                          className="w-10 h-10 flex items-center justify-center rounded-full text-skin-muted hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                          title="踢出玩家"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
