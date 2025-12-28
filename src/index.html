@@ -522,6 +522,8 @@
               setCurrentCard(remoteState.currentCard);
             if (remoteState.activePlayerId !== undefined)
               setActivePlayerId(remoteState.activePlayerId);
+            if (remoteState.lastPlayerId !== undefined)
+              setLastPlayerId(remoteState.lastPlayerId);
             if (remoteState.gameMode !== undefined)
               setGameMode(remoteState.gameMode);
             if (remoteState.turnPhase) setTurnPhase(remoteState.turnPhase);
@@ -626,6 +628,7 @@
             players,
             currentCard,
             activePlayerId,
+            lastPlayerId,
             gameMode,
             turnPhase,
             nextInstruction,
@@ -642,6 +645,7 @@
           players,
           currentCard,
           activePlayerId,
+          lastPlayerId,
           gameMode,
           turnPhase,
           nextInstruction,
@@ -1299,6 +1303,22 @@
             localStorage.removeItem("tod_history");
             setUsedCardIds(new Set());
             reset();
+          }
+        };
+
+        // 複製房間連結
+        const handleCopyLink = () => {
+          soundManager.playClick();
+          const baseUrl = window.location.href.split("?")[0];
+          const joinUrl = `${baseUrl}?room=${roomId}`;
+
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard
+              .writeText(joinUrl)
+              .then(() => alert("連結已複製！快傳給朋友吧！"))
+              .catch((err) => prompt("複製失敗，請手動複製：", joinUrl));
+          } else {
+            prompt("請手動複製連結：", joinUrl);
           }
         };
 
@@ -2087,7 +2107,7 @@
                           <div className="h-32 flex items-center justify-center text-skin-muted animate-pulse">
                             正在決定命運...
                           </div>
-                        ) : (
+                        ) : isHost ? (
                           <button
                             onClick={() => rollNextPlayer()}
                             disabled={turnPhase === "spinning"}
@@ -2097,6 +2117,10 @@
                               ? "抽選中..."
                               : "抽選玩家"}
                           </button>
+                        ) : (
+                          <div className="w-full h-32 flex items-center justify-center bg-skin-card border border-skin-border rounded-2xl text-skin-muted text-xl font-bold tracking-widest uppercase">
+                            等待房主抽選...
+                          </div>
                         )}
                       </div>
                     )}
@@ -2499,6 +2523,12 @@
                         <p className="text-xs text-skin-muted">
                           掃描 QR Code 直接加入
                         </p>
+                        <button
+                          onClick={handleCopyLink}
+                          className="mt-2 px-6 py-2 bg-skin-base border border-skin-accent text-skin-accent rounded-lg hover:bg-skin-accent hover:text-black transition-all font-bold text-sm flex items-center gap-2"
+                        >
+                          <span>🔗</span> 複製房間連結
+                        </button>
                       </div>
 
                       {isHost ? (
