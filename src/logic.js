@@ -204,6 +204,8 @@ function App() {
         const p = remoteState.players;
         const arr = Array.isArray(p) ? p : Object.values(p);
         setPlayers(arr.filter(Boolean)); // 過濾掉可能的空值 (null/undefined)
+      } else {
+        setPlayers([]);
       }
 
       if (remoteState.currentCard !== undefined)
@@ -322,7 +324,7 @@ function App() {
         historyLog,
         customPack: playableData.custom,
       };
-      db.ref(`rooms/${roomId}`).set(stateToSync);
+      db.ref(`rooms/${roomId}`).update(stateToSync);
     }, 500); // 500ms 延遲
 
     return () => clearTimeout(timerId);
@@ -461,10 +463,12 @@ function App() {
 
   // === Force Redirect to Game View on Spin (Sync) ===
   useEffect(() => {
-    if (isOnline && turnPhase === "spinning" && currentView !== "game") {
-      setCurrentView("game");
+    if (isOnline && turnPhase === "spinning") {
+      if (currentView !== "game") setCurrentView("game");
+      if (isNavOpen) setIsNavOpen(false);
+      if (isChatOpen) setIsChatOpen(false);
     }
-  }, [isOnline, turnPhase, currentView]);
+  }, [isOnline, turnPhase, currentView, isNavOpen, isChatOpen]);
 
   // === 核心邏輯 ===
 
