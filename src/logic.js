@@ -929,6 +929,12 @@ function App() {
 
   const completeTurn = () => {
     soundManager.playClick();
+
+    // 無論是否為 Pass，完成回合後該玩家都應成為上一位玩家 (獲得下次抽選權)
+    if (activePlayerId) {
+      setLastPlayerId(activePlayerId);
+    }
+
     if (activePlayerId && gameMode !== "pass") {
       const player = players.find((p) => p.id === activePlayerId);
       if (player && currentCard) {
@@ -946,7 +952,6 @@ function App() {
           ...prev,
         ]);
       }
-      setLastPlayerId(activePlayerId);
       setPlayers((prevPlayers) =>
         prevPlayers.map((p) => {
           if (p.id === activePlayerId) {
@@ -2043,23 +2048,15 @@ function App() {
                   <div className="mt-8 flex flex-col gap-3">
                     <button
                       onClick={
-                        !isOnline || gameMode === "pass" || isActivePlayer
+                        !isOnline || isActivePlayer
                           ? completeTurn
                           : isHost
                           ? forceSkipTurn
                           : undefined
                       }
-                      disabled={
-                        isOnline &&
-                        gameMode !== "pass" &&
-                        !isActivePlayer &&
-                        !isHost
-                      }
+                      disabled={isOnline && !isActivePlayer && !isHost}
                       className={`w-full py-4 font-bold uppercase tracking-[0.2em] rounded-lg transition-all shadow-lg ${
-                        isOnline &&
-                        gameMode !== "pass" &&
-                        !isActivePlayer &&
-                        !isHost
+                        isOnline && !isActivePlayer && !isHost
                           ? "bg-skin-card border border-skin-border text-skin-muted cursor-not-allowed"
                           : "bg-skin-accent text-black hover:brightness-110"
                       }`}
