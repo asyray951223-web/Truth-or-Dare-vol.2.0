@@ -384,10 +384,6 @@ function App() {
   useEffect(() => {
     if (!isOnline || !roomId || isRemoteUpdate.current) return;
 
-    // 只有房主、當前輪到的玩家、正在執行任務或被選中的玩家可以寫入
-    if (!isHost && !isMyTurnToRoll && !isActivePlayer && !isSelectedPlayer)
-      return;
-
     // 優化：加入防抖 (Debounce) 機制，避免頻繁寫入資料庫
     const delay = turnPhase === "spinning" ? 0 : 500; // 轉動時立即同步，避免競態條件
     const timerId = setTimeout(() => {
@@ -836,6 +832,13 @@ function App() {
     setTimeout(() => {
       soundManager.playWin();
       if (navigator.vibrate) navigator.vibrate([50, 50, 100]); // 震動回饋：成功模式 (震-停-震)
+
+      // 確保當前被選中的玩家在結果出爐後，能順利交接權限 (成為 lastPlayerId)
+      // 這樣即使 nextInstruction 更新導致 isSelectedPlayer 失效，也能透過 isMyTurnToRoll 保持同步權限
+      if (nextInstruction?.targetPlayer) {
+        setLastPlayerId(nextInstruction.targetPlayer.id);
+      }
+
       setNextInstruction(result);
       setRouletteState((prev) => ({ ...prev, isSpinning: false }));
       setTurnPhase("selected");
@@ -966,6 +969,34 @@ function App() {
           return p;
         })
       );
+    }
+    setCurrentCard(null);
+    setGameMode(null);
+    setActivePlayerId(null);
+    setTurnPhase("idle");
+  };
+
+  const forceSkipTurn = () => {
+    soundManager.playClick();
+    if (activePlayerId && gameMode !== "pass") {
+      const player = players.find((p) => p.id === activePlayerId);
+      if (player && currentCard) {
+        setHistoryLog((prev) => [
+          {
+            id: Date.now(),
+            type: gameMode,
+            text: `(已被房主跳過) ${currentCard.text}`,
+            playerName: player.name,
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+          ...prev,
+        ]);
+      }
+      setLastPlayerId(activePlayerId);
+      // 不加分，直接結束
     }
     setCurrentCard(null);
     setGameMode(null);
@@ -2017,23 +2048,46 @@ function App() {
 
                   <div className="mt-8 flex flex-col gap-3">
                     <button
-                      onClick={completeTurn}
-                      className="w-full py-4 bg-skin-accent text-black font-bold uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-all shadow-lg"
+                      onClick={
+                        !isOnline || gameMode === "pass" || isActivePlayer
+                          ? completeTurn
+                          : isHost
+                          ? forceSkipTurn
+                          : undefined
+                      }
+                      disabled={
+                        isOnline &&
+                        gameMode !== "pass" &&
+                        !isActivePlayer &&
+                        !isHost
+                      }
+                      className={`w-full py-4 font-bold uppercase tracking-[0.2em] rounded-lg transition-all shadow-lg ${
+                        isOnline &&
+                        gameMode !== "pass" &&
+                        !isActivePlayer &&
+                        !isHost
+                          ? "bg-skin-card border border-skin-border text-skin-muted cursor-not-allowed"
+                          : "bg-skin-accent text-black hover:brightness-110"
+                      }`}
                     >
                       {gameMode === "pass"
                         ? "跳過回合"
-                        : activePlayerId
+                        : !isOnline || isActivePlayer
                         ? `完成任務 (+${gameMode === "dare" ? 2 : 1}分)`
-                        : "下一回合"}
+                        : isHost
+                        ? "強制跳過 (不計分)"
+                        : "等待玩家行動..."}
                     </button>
-                    {gameMode !== "punishment" && gameMode !== "pass" && (
-                      <button
-                        onClick={drawPunishment}
-                        className="w-full py-3 border border-skin-border text-skin-muted hover:text-rose-500 hover:border-rose-500 transition-colors uppercase text-xs tracking-widest rounded-lg"
-                      >
-                        放棄並接受懲罰
-                      </button>
-                    )}
+                    {gameMode !== "punishment" &&
+                      gameMode !== "pass" &&
+                      (!isOnline || isActivePlayer) && (
+                        <button
+                          onClick={drawPunishment}
+                          className="w-full py-3 border border-skin-border text-skin-muted hover:text-rose-500 hover:border-rose-500 transition-colors uppercase text-xs tracking-widest rounded-lg"
+                        >
+                          放棄並接受懲罰
+                        </button>
+                      )}
                   </div>
                 </div>
               ) : (
@@ -2083,30 +2137,10 @@ function App() {
                   ) : (
                     <button
                       onClick={() => rollNextPlayer()}
-                      disabled={
-                        turnPhase === "spinning" ||
-                        (!isHost &&
-                          !isMyTurnToRoll &&
-                          !isActivePlayer &&
-                          !isSelectedPlayer)
-                      }
-                      className={`w-full h-32 text-3xl font-bold rounded-2xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed tracking-widest uppercase ${
-                        !isHost &&
-                        !isMyTurnToRoll &&
-                        !isActivePlayer &&
-                        !isSelectedPlayer
-                          ? "bg-skin-card border border-skin-border text-skin-muted"
-                          : "bg-skin-accent text-black hover:brightness-110"
-                      }`}
+                      disabled={turnPhase === "spinning"}
+                      className={`w-full h-32 text-3xl font-bold rounded-2xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed tracking-widest uppercase ${"bg-skin-accent text-black hover:brightness-110"}`}
                     >
-                      {turnPhase === "spinning"
-                        ? "抽選中..."
-                        : !isHost &&
-                          !isMyTurnToRoll &&
-                          !isActivePlayer &&
-                          !isSelectedPlayer
-                        ? "等待抽選..."
-                        : "抽選玩家"}
+                      {turnPhase === "spinning" ? "抽選中..." : "抽選玩家"}
                     </button>
                   )}
                 </div>
