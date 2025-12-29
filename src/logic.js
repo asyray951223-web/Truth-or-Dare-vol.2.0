@@ -67,47 +67,25 @@ function App() {
   // 檢查是否輪到自己 (上一位玩家) 進行抽選
   const isMyTurnToRoll = useMemo(() => {
     if (!isOnline || !lastPlayerId || !myUid) return false;
-    const lastPlayer = players.find((p) => p.id == lastPlayerId); // 使用寬鬆比對避免類型問題
+    const lastPlayer = players.find((p) => p.id === lastPlayerId);
     return lastPlayer && lastPlayer.uid === myUid;
   }, [isOnline, lastPlayerId, players, myUid]);
 
   // 檢查是否為當前執行任務的玩家 (確保能同步懲罰/完成狀態)
   const isActivePlayer = useMemo(() => {
     if (!isOnline || !activePlayerId || !myUid) return false;
-    const activePlayer = players.find((p) => p.id == activePlayerId); // 使用寬鬆比對
+    const activePlayer = players.find((p) => p.id === activePlayerId);
     return activePlayer && activePlayer.uid === myUid;
   }, [isOnline, activePlayerId, players, myUid]);
 
-  // 判斷當前使用者是否有權限操作任務 (完成/懲罰)
-  // 1. 單機模式
-  // 2. 本人是執行者
-  // 3. 房主且執行者是 NPC (無 UID)
-  const canOperate = useMemo(() => {
-    if (!isOnline) return true;
-    if (isActivePlayer) return true;
-    if (isHost && activePlayerId) {
-      const p = players.find((p) => p.id == activePlayerId); // 使用寬鬆比對
-      if (p) {
-        // 1. NPC (無 UID)
-        // 2. 玩家離線 (Host 代打)
-        // 3. 玩家是房主本人 (Fallback，防止 isActivePlayer 判斷失效)
-        if (!p.uid || !onlineUsers[p.uid] || p.uid === myUid) return true;
-      }
-    }
-    return false;
-  }, [
-    isOnline,
-    isActivePlayer,
-    isHost,
-    activePlayerId,
-    players,
-    onlineUsers,
-    myUid,
-  ]);
+  // 檢查是否為當前被轉盤選中的玩家 (確保在抽選結果出爐後擁有操作權)
+  const isSelectedPlayer = useMemo(() => {
+    if (!isOnline || !nextInstruction?.targetPlayer || !myUid) return false;
+    return nextInstruction.targetPlayer.uid === myUid;
+  }, [isOnline, nextInstruction, myUid]);
 
   const isFirstMount = useRef(true);
   const rouletteContainerRef = useRef(null);
-  const pointerRef = useRef(null);
   const qrCanvasRef = useRef(null);
 
   // 輪盤狀態
@@ -305,6 +283,9 @@ function App() {
       // 強制同步：若處於轉盤轉動階段，強制清空卡片，確保動畫顯示
       if (remoteState.turnPhase === "spinning") {
         setCurrentCard(null);
+        setCurrentView("game");
+        setIsNavOpen(false);
+        setIsChatOpen(false);
       }
 
       if (remoteState.nextInstruction)
@@ -403,10 +384,12 @@ function App() {
   useEffect(() => {
     if (!isOnline || !roomId || isRemoteUpdate.current) return;
 
-    // 只有房主、當前輪到的玩家(抽選權)或正在執行任務的玩家(同步狀態)可以寫入
-    if (!isHost && !isMyTurnToRoll && !isActivePlayer) return;
+    // 只有房主、當前輪到的玩家、正在執行任務或被選中的玩家可以寫入
+    if (!isHost && !isMyTurnToRoll && !isActivePlayer && !isSelectedPlayer)
+      return;
 
     // 優化：加入防抖 (Debounce) 機制，避免頻繁寫入資料庫
+    const delay = turnPhase === "spinning" ? 0 : 500; // 轉動時立即同步，避免競態條件
     const timerId = setTimeout(() => {
       const stateToSync = {
         players,
@@ -424,7 +407,7 @@ function App() {
         customPack: playableData.custom,
       };
       db.ref(`rooms/${roomId}`).update(stateToSync);
-    }, 500); // 500ms 延遲
+    }, delay);
 
     return () => clearTimeout(timerId);
   }, [
@@ -444,6 +427,7 @@ function App() {
     isHost,
     isMyTurnToRoll,
     isActivePlayer,
+    isSelectedPlayer,
     historyLog,
     playableData,
   ]);
@@ -809,6 +793,7 @@ function App() {
 
   const finalizeRoll = (result, instant) => {
     isRemoteUpdate.current = false; // 確保本地操作能觸發 Firebase 同步
+    setCurrentCard(null); // 確保本地卡片被移除，優先顯示轉盤
     if (instant) {
       setNextInstruction(result);
       setRouletteState({
@@ -838,38 +823,28 @@ function App() {
       return getRandomRouletteItem();
     });
 
-    // 1. 重置到起點 (無動畫)
-    setRouletteState({ isSpinning: false, items, targetIndex: 0 });
+    // 1. 直接開始旋轉 (移除 setTimeout 以避免狀態不同步)
     setRouletteState({
-      isSpinning: false,
+      isSpinning: true,
       items,
-      targetIndex: 0,
-      duration: 0,
+      targetIndex,
+      duration: spinDuration,
+      startTime: Date.now() + serverTimeOffset.current,
     });
 
-    // 2. 開始旋轉 (有動畫)
+    // 2. 動畫結束後更新指令並解鎖
     setTimeout(() => {
-      setRouletteState((prev) => ({
-        ...prev,
-        isSpinning: true,
-        targetIndex,
-        duration: spinDuration,
-      }));
+      soundManager.playWin();
+      if (navigator.vibrate) navigator.vibrate([50, 50, 100]); // 震動回饋：成功模式 (震-停-震)
+      setNextInstruction(result);
+      setRouletteState((prev) => ({ ...prev, isSpinning: false }));
+      setTurnPhase("selected");
 
-      // 3. 動畫結束後更新指令並解鎖
+      // 自動觸發隨機命運
       setTimeout(() => {
-        soundManager.playWin();
-        if (navigator.vibrate) navigator.vibrate([50, 50, 100]); // 震動回饋：成功模式 (震-停-震)
-        setNextInstruction(result);
-        setRouletteState((prev) => ({ ...prev, isSpinning: false }));
-        setTurnPhase("selected");
-
-        // 自動觸發隨機命運
-        setTimeout(() => {
-          triggerRandomDestiny(result.targetPlayer);
-        }, 1000);
-      }, spinDuration);
-    }, 50);
+        triggerRandomDestiny(result.targetPlayer);
+      }, 1000);
+    }, spinDuration);
   };
 
   const toggleMute = () => {
@@ -928,18 +903,6 @@ function App() {
     }
 
     const target = specificPlayer || nextInstruction.targetPlayer;
-
-    // 修正：確保 target 是最新的玩家物件 (從 players 列表中查找)
-    if (target) {
-      const found = players.find((p) => p.id == target.id);
-      if (found) target = found;
-    }
-
-    // 修正：如果是手動點擊卡片(非轉盤觸發)且無目標，自動指派給自己(若有綁定玩家)
-    if (!target && isOnline && myUid) {
-      target = players.find((p) => p.uid === myUid);
-    }
-
     setActivePlayerId(target ? target.id : null);
 
     setIsAnimating(true);
@@ -968,14 +931,8 @@ function App() {
 
   const completeTurn = () => {
     soundManager.playClick();
-
-    // 無論是否為 Pass，完成回合後該玩家都應成為上一位玩家 (獲得下次抽選權)
-    if (activePlayerId) {
-      setLastPlayerId(activePlayerId);
-    }
-
     if (activePlayerId && gameMode !== "pass") {
-      const player = players.find((p) => p.id == activePlayerId);
+      const player = players.find((p) => p.id === activePlayerId);
       if (player && currentCard) {
         setHistoryLog((prev) => [
           {
@@ -991,9 +948,10 @@ function App() {
           ...prev,
         ]);
       }
+      setLastPlayerId(activePlayerId);
       setPlayers((prevPlayers) =>
         prevPlayers.map((p) => {
-          if (p.id == activePlayerId) {
+          if (p.id === activePlayerId) {
             const scoreToAdd = gameMode === "dare" ? 2 : 1;
             const historyKey = gameMode;
             return {
@@ -1008,36 +966,6 @@ function App() {
           return p;
         })
       );
-    }
-    setCurrentCard(null);
-    setGameMode(null);
-    setActivePlayerId(null);
-    setTurnPhase("idle");
-  };
-
-  const forceSkipTurn = () => {
-    soundManager.playClick();
-    if (!window.confirm("確定要強制跳過此回合嗎？這將不會計算分數。")) return;
-
-    if (activePlayerId && gameMode !== "pass") {
-      const player = players.find((p) => p.id == activePlayerId);
-      if (player && currentCard) {
-        setHistoryLog((prev) => [
-          {
-            id: Date.now(),
-            type: gameMode,
-            text: `(已被房主跳過) ${currentCard.text}`,
-            playerName: player.name,
-            time: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          },
-          ...prev,
-        ]);
-      }
-      setLastPlayerId(activePlayerId);
-      // 不加分，直接結束
     }
     setCurrentCard(null);
     setGameMode(null);
@@ -1610,7 +1538,22 @@ function App() {
     if (!rouletteState.isSpinning) return;
 
     let animationFrameId;
-    const startTime = performance.now();
+
+    // 計算動畫起始時間 (支援多端同步)
+    let timeCorrection = 0;
+    if (rouletteState.startTime) {
+      const serverNow = Date.now() + serverTimeOffset.current;
+      const diff = serverNow - rouletteState.startTime;
+      // 若計算出的經過時間超過動畫總長，可能是時鐘偏差過大
+      // 此時強制重置 timeCorrection 為 0，確保動畫能播放 (犧牲同步性換取體驗)
+      if (diff > rouletteState.duration) {
+        timeCorrection = 0;
+      } else {
+        timeCorrection = Math.max(0, diff);
+      }
+    }
+    const startTime = performance.now() - timeCorrection;
+
     const startPos = 112; // 起始偏移量 (第一個項目的中心)
     // 目標位置：targetIndex * itemWidth(224) + centerOffset(112)
     const endPos = rouletteState.targetIndex * 224 + 112;
@@ -1631,16 +1574,6 @@ function App() {
       if (rouletteContainerRef.current) {
         // 直接操作 DOM transform，避免 reflow
         rouletteContainerRef.current.style.transform = `translateX(-${currentPos}px)`;
-
-        // Pointer Animation (指針擺動效果)
-        if (pointerRef.current) {
-          // 計算指針角度：在項目交界處 (Gap) 達到最大旋轉
-          // currentPos 為視窗中心對應的卷軸位置，112 為第一個項目中心
-          // 取絕對值確保指針往同一個方向 (順時針) 擺動，模擬被卡片撥動
-          const indexFloat = (currentPos - 112) / 224;
-          const angle = Math.abs(Math.sin(indexFloat * Math.PI)) * 25;
-          pointerRef.current.style.transform = `rotate(${angle}deg)`;
-        }
 
         // 1. 音效觸發 (基於計算出的位置)
         const currentIndex = Math.round((currentPos - 112) / 224);
@@ -1667,9 +1600,6 @@ function App() {
           // 確保最後位置準確
           rouletteContainerRef.current.style.transform = `translateX(-${endPos}px)`;
         }
-        if (pointerRef.current) {
-          pointerRef.current.style.transform = "rotate(0deg)";
-        }
       }
     };
 
@@ -1685,6 +1615,7 @@ function App() {
     rouletteState.isSpinning,
     rouletteState.targetIndex,
     rouletteState.duration,
+    rouletteState.startTime,
   ]);
 
   // 炸彈計時器
@@ -2027,10 +1958,10 @@ function App() {
                     </div>
 
                     {activePlayerId &&
-                      players.find((p) => p.id == activePlayerId) && (
+                      players.find((p) => p.id === activePlayerId) && (
                         <span className="text-xs bg-skin-accent text-black px-2 py-1 rounded font-bold animate-pulse">
                           執行者:{" "}
-                          {players.find((p) => p.id == activePlayerId).name}
+                          {players.find((p) => p.id === activePlayerId).name}
                         </span>
                       )}
                   </div>
@@ -2086,38 +2017,23 @@ function App() {
 
                   <div className="mt-8 flex flex-col gap-3">
                     <button
-                      onClick={
-                        canOperate
-                          ? completeTurn
-                          : isHost
-                          ? forceSkipTurn
-                          : undefined
-                      }
-                      disabled={isOnline && !canOperate && !isHost}
-                      className={`w-full py-4 font-bold uppercase tracking-[0.2em] rounded-lg transition-all shadow-lg ${
-                        isOnline && !canOperate && !isHost
-                          ? "bg-skin-card border border-skin-border text-skin-muted cursor-not-allowed"
-                          : "bg-skin-accent text-black hover:brightness-110"
-                      }`}
+                      onClick={completeTurn}
+                      className="w-full py-4 bg-skin-accent text-black font-bold uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-all shadow-lg"
                     >
                       {gameMode === "pass"
                         ? "跳過回合"
-                        : canOperate
+                        : activePlayerId
                         ? `完成任務 (+${gameMode === "dare" ? 2 : 1}分)`
-                        : isHost
-                        ? "強制跳過 (不計分)"
-                        : "等待玩家行動..."}
+                        : "下一回合"}
                     </button>
-                    {gameMode !== "punishment" &&
-                      gameMode !== "pass" &&
-                      canOperate && (
-                        <button
-                          onClick={drawPunishment}
-                          className="w-full py-3 border border-skin-border text-skin-muted hover:text-rose-500 hover:border-rose-500 transition-colors uppercase text-xs tracking-widest rounded-lg"
-                        >
-                          放棄並接受懲罰
-                        </button>
-                      )}
+                    {gameMode !== "punishment" && gameMode !== "pass" && (
+                      <button
+                        onClick={drawPunishment}
+                        className="w-full py-3 border border-skin-border text-skin-muted hover:text-rose-500 hover:border-rose-500 transition-colors uppercase text-xs tracking-widest rounded-lg"
+                      >
+                        放棄並接受懲罰
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -2129,14 +2045,8 @@ function App() {
                     </div>
 
                     {/* Center Indicator */}
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 z-30 filter drop-shadow-lg">
-                      <div
-                        ref={pointerRef}
-                        className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[24px] border-t-skin-accent origin-top"
-                      ></div>
-                    </div>
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-full bg-skin-accent/30 z-20"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-2 border-skin-accent rounded-xl z-20 shadow-[0_0_20px_var(--accent-color)] opacity-30 pointer-events-none"></div>
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-full bg-skin-accent z-20 shadow-[0_0_10px_var(--accent-color)]"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-2 border-skin-accent rounded-xl z-20 shadow-[0_0_20px_var(--accent-color)] opacity-50 pointer-events-none"></div>
 
                     <div
                       ref={rouletteContainerRef}
@@ -2175,17 +2085,26 @@ function App() {
                       onClick={() => rollNextPlayer()}
                       disabled={
                         turnPhase === "spinning" ||
-                        (!isHost && !isMyTurnToRoll && !isActivePlayer)
+                        (!isHost &&
+                          !isMyTurnToRoll &&
+                          !isActivePlayer &&
+                          !isSelectedPlayer)
                       }
                       className={`w-full h-32 text-3xl font-bold rounded-2xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed tracking-widest uppercase ${
-                        !isHost && !isMyTurnToRoll && !isActivePlayer
+                        !isHost &&
+                        !isMyTurnToRoll &&
+                        !isActivePlayer &&
+                        !isSelectedPlayer
                           ? "bg-skin-card border border-skin-border text-skin-muted"
                           : "bg-skin-accent text-black hover:brightness-110"
                       }`}
                     >
                       {turnPhase === "spinning"
                         ? "抽選中..."
-                        : !isHost && !isMyTurnToRoll && !isActivePlayer
+                        : !isHost &&
+                          !isMyTurnToRoll &&
+                          !isActivePlayer &&
+                          !isSelectedPlayer
                         ? "等待抽選..."
                         : "抽選玩家"}
                     </button>
