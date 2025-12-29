@@ -365,8 +365,14 @@ function App() {
       const guests = snapshot.val();
       if (!guests) return;
 
-      setPlayers((prev) => {
-        const newPlayers = [...prev];
+      // 使用 transaction 確保在多人連線時不會因為競態條件導致玩家名單覆蓋
+      db.ref(`rooms/${roomId}/players`).transaction((currentPlayers) => {
+        let newPlayers = [];
+        if (currentPlayers) {
+          newPlayers = Array.isArray(currentPlayers)
+            ? [...currentPlayers]
+            : Object.values(currentPlayers);
+        }
         let hasChange = false;
 
         Object.entries(guests).forEach(([uid, data]) => {
@@ -384,13 +390,13 @@ function App() {
           }
         });
 
-        return hasChange ? newPlayers : prev;
+        return hasChange ? newPlayers : undefined;
       });
     };
 
     guestsRef.on("value", handleGuests);
     return () => guestsRef.off("value", handleGuests);
-  }, [isHost, roomId, isOnline, players]);
+  }, [isHost, roomId, isOnline]);
 
   // === Presence System (Online Status) ===
   useEffect(() => {
@@ -431,6 +437,17 @@ function App() {
     offsetRef.on("value", handleOffset);
     return () => offsetRef.off("value", handleOffset);
   }, [isOnline]);
+
+  // === Player Join Notification (玩家加入提示) ===
+  const prevPlayerCount = useRef(players.length);
+  useEffect(() => {
+    if (players.length > prevPlayerCount.current) {
+      // 當玩家人數增加時，播放清脆的提示音 (Ding!)
+      soundManager.playTone(1200, "sine", 0.1, 0.1);
+      setTimeout(() => soundManager.playTone(1800, "sine", 0.2, 0.1), 100);
+    }
+    prevPlayerCount.current = players.length;
+  }, [players]);
 
   // === Chat System ===
   // 更新 Ref 以便在 Firebase callback 中讀取
@@ -3035,7 +3052,7 @@ function App() {
                     return (
                       <div
                         key={p.id}
-                        className="flex items-center gap-4 bg-skin-base/50 p-4 rounded-xl border border-skin-border hover:border-skin-accent/50 transition-colors"
+                        className="flex items-center gap-4 bg-skin-base/50 p-4 rounded-xl border border-skin-border hover:border-skin-accent/50 transition-colors animate-fade-in"
                       >
                         <div className="w-10 h-10 rounded-full bg-skin-accent/20 flex items-center justify-center text-skin-accent font-bold relative">
                           {String(p.name || "?").charAt(0)}
