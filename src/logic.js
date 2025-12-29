@@ -87,10 +87,23 @@ function App() {
     if (isActivePlayer) return true;
     if (isHost && activePlayerId) {
       const p = players.find((p) => p.id == activePlayerId); // 使用寬鬆比對
-      if (p && !p.uid) return true;
+      if (p) {
+        // 1. NPC (無 UID)
+        // 2. 玩家離線 (Host 代打)
+        // 3. 玩家是房主本人 (Fallback，防止 isActivePlayer 判斷失效)
+        if (!p.uid || !onlineUsers[p.uid] || p.uid === myUid) return true;
+      }
     }
     return false;
-  }, [isOnline, isActivePlayer, isHost, activePlayerId, players]);
+  }, [
+    isOnline,
+    isActivePlayer,
+    isHost,
+    activePlayerId,
+    players,
+    onlineUsers,
+    myUid,
+  ]);
 
   const isFirstMount = useRef(true);
   const rouletteContainerRef = useRef(null);
@@ -915,6 +928,12 @@ function App() {
     }
 
     const target = specificPlayer || nextInstruction.targetPlayer;
+
+    // 修正：確保 target 是最新的玩家物件 (從 players 列表中查找)
+    if (target) {
+      const found = players.find((p) => p.id == target.id);
+      if (found) target = found;
+    }
 
     // 修正：如果是手動點擊卡片(非轉盤觸發)且無目標，自動指派給自己(若有綁定玩家)
     if (!target && isOnline && myUid) {
