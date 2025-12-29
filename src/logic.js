@@ -30,6 +30,7 @@ function App() {
   const [connectionError, setConnectionError] = useState(null);
   const [hostId, setHostId] = useState(null);
   const isRemoteUpdate = React.useRef(false); // 防止無限迴圈更新
+  const serverTimeOffset = useRef(0); // 伺服器時間偏移量
 
   // 使用者名稱 (用於連線綁定)
   const [myUserName, setMyUserName] = useState(() =>
@@ -237,7 +238,15 @@ function App() {
         if (!d.rotation) d.rotation = { x: 0, y: 0 };
         setDiceState(d);
       }
-      if (remoteState.bombState) setBombState(remoteState.bombState);
+      if (remoteState.bombState) {
+        const bs = remoteState.bombState;
+        // 修正：使用 Server Time 重新計算 timeLeft 以避免 UI 跳動 (Jitter)
+        if (bs.isActive && bs.endTime) {
+          const now = Date.now() + serverTimeOffset.current;
+          bs.timeLeft = Math.max(0, (bs.endTime - now) / 1000);
+        }
+        setBombState(bs);
+      }
 
       // === 同步歷史紀錄 ===
       if (remoteState.historyLog) {
@@ -381,7 +390,7 @@ function App() {
 
     guestsRef.on("value", handleGuests);
     return () => guestsRef.off("value", handleGuests);
-  }, [isHost, roomId, isOnline]);
+  }, [isHost, roomId, isOnline, players]);
 
   // === Presence System (Online Status) ===
   useEffect(() => {
@@ -411,6 +420,17 @@ function App() {
       myPresenceRef.remove();
     };
   }, [isOnline, roomId, myUid]);
+
+  // === Time Sync (校正伺服器時間) ===
+  useEffect(() => {
+    if (!isOnline) return;
+    const offsetRef = db.ref(".info/serverTimeOffset");
+    const handleOffset = (snap) => {
+      serverTimeOffset.current = snap.val() || 0;
+    };
+    offsetRef.on("value", handleOffset);
+    return () => offsetRef.off("value", handleOffset);
+  }, [isOnline]);
 
   // === Chat System ===
   // 更新 Ref 以便在 Firebase callback 中讀取
@@ -469,6 +489,21 @@ function App() {
       if (isChatOpen) setIsChatOpen(false);
     }
   }, [isOnline, turnPhase, currentView, isNavOpen, isChatOpen]);
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const newMessage = {
+      text: chatInput.trim(),
+      senderId: myUid,
+      senderName: myUserName || "玩家",
+      timestamp: firebase.database.ServerValue.TIMESTAMP,
+    };
+
+    db.ref(`rooms/${roomId}/chat`).push(newMessage);
+    setChatInput("");
+  };
 
   // === 核心邏輯 ===
 
@@ -938,7 +973,7 @@ function App() {
       return;
     }
     soundManager.playClick();
-    const now = Date.now();
+    const now = Date.now() + serverTimeOffset.current; // 使用校正後的伺服器時間
     setBombState({
       isActive: true,
       isExploded: false,
@@ -1492,7 +1527,8 @@ function App() {
           // 否則使用舊的遞減方式 (相容性)
           let newTime;
           if (prev.endTime) {
-            newTime = Math.max(0, (prev.endTime - Date.now()) / 1000);
+            const now = Date.now() + serverTimeOffset.current; // 使用校正後的伺服器時間
+            newTime = Math.max(0, (prev.endTime - now) / 1000);
           } else {
             newTime = prev.timeLeft - 0.1;
           }
