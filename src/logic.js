@@ -170,7 +170,9 @@ function App() {
 
   // === 自動儲存使用者名稱 ===
   useEffect(() => {
-    localStorage.setItem("tod_username", myUserName);
+    if (myUserName !== undefined) {
+      localStorage.setItem("tod_username", JSON.stringify(myUserName));
+    }
   }, [myUserName]);
 
   // === URL Auto-Join Logic (掃描 QR Code 自動加入) ===
@@ -2396,28 +2398,39 @@ function App() {
                     />
                     <button
                       onClick={() => {
-                        if (!roomId.trim()) return alert("請輸入房間號碼");
+                        const safeRoomId = roomId.trim();
+                        if (!safeRoomId) return alert("請輸入房間號碼");
+                        if (/[.#$[\]]/.test(safeRoomId))
+                          return alert("房間號碼不能包含特殊符號");
+
                         if (connectionError)
                           return alert("連線失敗，無法加入房間");
                         if (!myUid) return;
                         soundManager.playClick();
 
                         // 檢查房間是否存在
-                        db.ref(`rooms/${roomId}`)
+                        db.ref(`rooms/${safeRoomId}`)
                           .once("value")
                           .then((snapshot) => {
                             if (snapshot.exists()) {
                               // 寫入訪客資訊，等待房主綁定
-                              const guestName = myUserName.trim() || "訪客";
-                              db.ref(`rooms/${roomId}/guests/${myUid}`).set({
-                                name: guestName,
-                              });
+                              const safeName = String(myUserName || "").trim();
+                              const guestName = safeName || "訪客";
+                              db.ref(`rooms/${safeRoomId}/guests/${myUid}`).set(
+                                {
+                                  name: guestName,
+                                }
+                              );
 
-                              addToRecentRooms(roomId);
+                              addToRecentRooms(safeRoomId);
                               setIsOnline(true);
                             } else {
                               alert("找不到此房間，請確認號碼是否正確！");
                             }
+                          })
+                          .catch((err) => {
+                            console.error("Join Error:", err);
+                            alert("加入失敗，請檢查網路或房間號碼");
                           });
                       }}
                       disabled={!myUid && !connectionError}
