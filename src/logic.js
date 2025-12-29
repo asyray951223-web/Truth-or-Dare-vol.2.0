@@ -71,6 +71,13 @@ function App() {
     return lastPlayer && lastPlayer.uid === myUid;
   }, [isOnline, lastPlayerId, players, myUid]);
 
+  // 檢查是否為當前執行任務的玩家 (確保能同步懲罰/完成狀態)
+  const isActivePlayer = useMemo(() => {
+    if (!isOnline || !activePlayerId || !myUid) return false;
+    const activePlayer = players.find((p) => p.id === activePlayerId);
+    return activePlayer && activePlayer.uid === myUid;
+  }, [isOnline, activePlayerId, players, myUid]);
+
   const isFirstMount = useRef(true);
   const rouletteContainerRef = useRef(null);
   const pointerRef = useRef(null);
@@ -268,6 +275,11 @@ function App() {
       setGameMode(remoteState.gameMode || null);
       setTurnPhase(remoteState.turnPhase || "idle");
 
+      // 強制同步：若處於轉盤轉動階段，強制清空卡片，確保動畫顯示
+      if (remoteState.turnPhase === "spinning") {
+        setCurrentCard(null);
+      }
+
       if (remoteState.nextInstruction)
         setNextInstruction(remoteState.nextInstruction);
       if (remoteState.rouletteState) {
@@ -364,8 +376,8 @@ function App() {
   useEffect(() => {
     if (!isOnline || !roomId || isRemoteUpdate.current) return;
 
-    // 只有房主可以寫入資料庫，避免訪客覆蓋狀態
-    if (!isHost) return;
+    // 只有房主、當前輪到的玩家(抽選權)或正在執行任務的玩家(同步狀態)可以寫入
+    if (!isHost && !isMyTurnToRoll && !isActivePlayer) return;
 
     // 優化：加入防抖 (Debounce) 機制，避免頻繁寫入資料庫
     const timerId = setTimeout(() => {
@@ -403,6 +415,8 @@ function App() {
     hostId,
     roomId,
     isHost,
+    isMyTurnToRoll,
+    isActivePlayer,
     historyLog,
     playableData,
   ]);
@@ -767,6 +781,7 @@ function App() {
   };
 
   const finalizeRoll = (result, instant) => {
+    isRemoteUpdate.current = false; // 確保本地操作能觸發 Firebase 同步
     if (instant) {
       setNextInstruction(result);
       setRouletteState({
