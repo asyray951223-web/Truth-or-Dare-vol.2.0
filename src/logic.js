@@ -67,16 +67,30 @@ function App() {
   // 檢查是否輪到自己 (上一位玩家) 進行抽選
   const isMyTurnToRoll = useMemo(() => {
     if (!isOnline || !lastPlayerId || !myUid) return false;
-    const lastPlayer = players.find((p) => p.id === lastPlayerId);
+    const lastPlayer = players.find((p) => p.id == lastPlayerId); // 使用寬鬆比對避免類型問題
     return lastPlayer && lastPlayer.uid === myUid;
   }, [isOnline, lastPlayerId, players, myUid]);
 
   // 檢查是否為當前執行任務的玩家 (確保能同步懲罰/完成狀態)
   const isActivePlayer = useMemo(() => {
     if (!isOnline || !activePlayerId || !myUid) return false;
-    const activePlayer = players.find((p) => p.id === activePlayerId);
+    const activePlayer = players.find((p) => p.id == activePlayerId); // 使用寬鬆比對
     return activePlayer && activePlayer.uid === myUid;
   }, [isOnline, activePlayerId, players, myUid]);
+
+  // 判斷當前使用者是否有權限操作任務 (完成/懲罰)
+  // 1. 單機模式
+  // 2. 本人是執行者
+  // 3. 房主且執行者是 NPC (無 UID)
+  const canOperate = useMemo(() => {
+    if (!isOnline) return true;
+    if (isActivePlayer) return true;
+    if (isHost && activePlayerId) {
+      const p = players.find((p) => p.id == activePlayerId); // 使用寬鬆比對
+      if (p && !p.uid) return true;
+    }
+    return false;
+  }, [isOnline, isActivePlayer, isHost, activePlayerId, players]);
 
   const isFirstMount = useRef(true);
   const rouletteContainerRef = useRef(null);
@@ -901,6 +915,12 @@ function App() {
     }
 
     const target = specificPlayer || nextInstruction.targetPlayer;
+
+    // 修正：如果是手動點擊卡片(非轉盤觸發)且無目標，自動指派給自己(若有綁定玩家)
+    if (!target && isOnline && myUid) {
+      target = players.find((p) => p.uid === myUid);
+    }
+
     setActivePlayerId(target ? target.id : null);
 
     setIsAnimating(true);
@@ -936,7 +956,7 @@ function App() {
     }
 
     if (activePlayerId && gameMode !== "pass") {
-      const player = players.find((p) => p.id === activePlayerId);
+      const player = players.find((p) => p.id == activePlayerId);
       if (player && currentCard) {
         setHistoryLog((prev) => [
           {
@@ -954,7 +974,7 @@ function App() {
       }
       setPlayers((prevPlayers) =>
         prevPlayers.map((p) => {
-          if (p.id === activePlayerId) {
+          if (p.id == activePlayerId) {
             const scoreToAdd = gameMode === "dare" ? 2 : 1;
             const historyKey = gameMode;
             return {
@@ -981,7 +1001,7 @@ function App() {
     if (!window.confirm("確定要強制跳過此回合嗎？這將不會計算分數。")) return;
 
     if (activePlayerId && gameMode !== "pass") {
-      const player = players.find((p) => p.id === activePlayerId);
+      const player = players.find((p) => p.id == activePlayerId);
       if (player && currentCard) {
         setHistoryLog((prev) => [
           {
@@ -1988,10 +2008,10 @@ function App() {
                     </div>
 
                     {activePlayerId &&
-                      players.find((p) => p.id === activePlayerId) && (
+                      players.find((p) => p.id == activePlayerId) && (
                         <span className="text-xs bg-skin-accent text-black px-2 py-1 rounded font-bold animate-pulse">
                           執行者:{" "}
-                          {players.find((p) => p.id === activePlayerId).name}
+                          {players.find((p) => p.id == activePlayerId).name}
                         </span>
                       )}
                   </div>
@@ -2048,22 +2068,22 @@ function App() {
                   <div className="mt-8 flex flex-col gap-3">
                     <button
                       onClick={
-                        !isOnline || isActivePlayer
+                        canOperate
                           ? completeTurn
                           : isHost
                           ? forceSkipTurn
                           : undefined
                       }
-                      disabled={isOnline && !isActivePlayer && !isHost}
+                      disabled={isOnline && !canOperate && !isHost}
                       className={`w-full py-4 font-bold uppercase tracking-[0.2em] rounded-lg transition-all shadow-lg ${
-                        isOnline && !isActivePlayer && !isHost
+                        isOnline && !canOperate && !isHost
                           ? "bg-skin-card border border-skin-border text-skin-muted cursor-not-allowed"
                           : "bg-skin-accent text-black hover:brightness-110"
                       }`}
                     >
                       {gameMode === "pass"
                         ? "跳過回合"
-                        : !isOnline || isActivePlayer
+                        : canOperate
                         ? `完成任務 (+${gameMode === "dare" ? 2 : 1}分)`
                         : isHost
                         ? "強制跳過 (不計分)"
@@ -2071,7 +2091,7 @@ function App() {
                     </button>
                     {gameMode !== "punishment" &&
                       gameMode !== "pass" &&
-                      (!isOnline || isActivePlayer) && (
+                      canOperate && (
                         <button
                           onClick={drawPunishment}
                           className="w-full py-3 border border-skin-border text-skin-muted hover:text-rose-500 hover:border-rose-500 transition-colors uppercase text-xs tracking-widest rounded-lg"
