@@ -30,6 +30,7 @@ function App() {
   const [connectionError, setConnectionError] = useState(null);
   const [hostId, setHostId] = useState(null);
   const isRemoteUpdate = React.useRef(false); // 防止無限迴圈更新
+  const autoJoinPending = useRef(false); // 標記是否需要自動執行加入邏輯
   const serverTimeOffset = useRef(0); // 伺服器時間偏移量
 
   // 使用者名稱 (用於連線綁定)
@@ -72,6 +73,7 @@ function App() {
 
   const isFirstMount = useRef(true);
   const rouletteContainerRef = useRef(null);
+  const pointerRef = useRef(null);
   const qrCanvasRef = useRef(null);
 
   // 輪盤狀態
@@ -183,8 +185,56 @@ function App() {
       setRoomId(roomParam);
       setIsOnline(true);
       setCurrentView("online");
+      autoJoinPending.current = true; // 標記為需要執行加入動作
+
+      // 保存到 LocalStorage 以便 PWA 模式下讀取 (解決安裝後參數遺失問題)
+      localStorage.setItem("tod_pending_room", roomParam);
+      localStorage.setItem("tod_pending_room_time", Date.now().toString());
+    } else {
+      // 檢查是否有 Pending Room (針對 PWA 啟動情境)
+      const pendingRoom = localStorage.getItem("tod_pending_room");
+      const pendingTime = localStorage.getItem("tod_pending_room_time");
+
+      if (pendingRoom && pendingTime) {
+        const timeDiff = Date.now() - parseInt(pendingTime);
+        if (timeDiff < 5 * 60 * 1000) {
+          // 5分鐘內有效，避免無限期自動加入舊房間
+          setRoomId(pendingRoom);
+          setIsOnline(true);
+          setCurrentView("online");
+          autoJoinPending.current = true;
+        }
+        // 取用後清除，避免重複觸發
+        localStorage.removeItem("tod_pending_room");
+        localStorage.removeItem("tod_pending_room_time");
+      }
     }
   }, []);
+
+  // === Auto-Join Execution (執行自動加入) ===
+  useEffect(() => {
+    // 必須等到取得 myUid 且確實有觸發自動加入需求時才執行
+    if (autoJoinPending.current && myUid && roomId && isOnline) {
+      autoJoinPending.current = false; // 重置標記，避免重複執行
+
+      const guestName = myUserName || "訪客";
+
+      // 檢查房間是否存在並寫入訪客資料
+      db.ref(`rooms/${roomId}`)
+        .once("value")
+        .then((snapshot) => {
+          if (snapshot.exists()) {
+            db.ref(`rooms/${roomId}/guests/${myUid}`).set({
+              name: guestName,
+            });
+            addToRecentRooms(roomId);
+          } else {
+            alert("連結無效：房間不存在或已關閉");
+            setIsOnline(false);
+          }
+        });
+    }
+  }, [myUid, roomId, isOnline, myUserName]);
 
   // === Firebase 連線邏輯 (監聽) ===
   useEffect(() => {
@@ -211,14 +261,13 @@ function App() {
         setPlayers([]);
       }
 
-      if (remoteState.currentCard !== undefined)
-        setCurrentCard(remoteState.currentCard);
-      if (remoteState.activePlayerId !== undefined)
-        setActivePlayerId(remoteState.activePlayerId);
-      if (remoteState.lastPlayerId !== undefined)
-        setLastPlayerId(remoteState.lastPlayerId);
-      if (remoteState.gameMode !== undefined) setGameMode(remoteState.gameMode);
-      if (remoteState.turnPhase) setTurnPhase(remoteState.turnPhase);
+      // 修正：確保當遠端狀態為 null/undefined 時，本地狀態也能正確清空 (解決卡片殘留問題)
+      setCurrentCard(remoteState.currentCard || null);
+      setActivePlayerId(remoteState.activePlayerId || null);
+      setLastPlayerId(remoteState.lastPlayerId || null);
+      setGameMode(remoteState.gameMode || null);
+      setTurnPhase(remoteState.turnPhase || "idle");
+
       if (remoteState.nextInstruction)
         setNextInstruction(remoteState.nextInstruction);
       if (remoteState.rouletteState) {
@@ -1494,6 +1543,16 @@ function App() {
         // 直接操作 DOM transform，避免 reflow
         rouletteContainerRef.current.style.transform = `translateX(-${currentPos}px)`;
 
+        // Pointer Animation (指針擺動效果)
+        if (pointerRef.current) {
+          // 計算指針角度：在項目交界處 (Gap) 達到最大旋轉
+          // currentPos 為視窗中心對應的卷軸位置，112 為第一個項目中心
+          // 取絕對值確保指針往同一個方向 (順時針) 擺動，模擬被卡片撥動
+          const indexFloat = (currentPos - 112) / 224;
+          const angle = Math.abs(Math.sin(indexFloat * Math.PI)) * 25;
+          pointerRef.current.style.transform = `rotate(${angle}deg)`;
+        }
+
         // 1. 音效觸發 (基於計算出的位置)
         const currentIndex = Math.round((currentPos - 112) / 224);
         if (currentIndex !== lastIndex && currentIndex >= 0) {
@@ -1518,6 +1577,9 @@ function App() {
           rouletteContainerRef.current.style.filter = "none";
           // 確保最後位置準確
           rouletteContainerRef.current.style.transform = `translateX(-${endPos}px)`;
+        }
+        if (pointerRef.current) {
+          pointerRef.current.style.transform = "rotate(0deg)";
         }
       }
     };
@@ -1827,7 +1889,7 @@ function App() {
             </header>
 
             <div className="w-full max-w-md min-h-[400px] flex flex-col items-center justify-center relative perspective-1000 animate-fade-in">
-              {currentCard ? (
+              {currentCard && turnPhase !== "spinning" ? (
                 <div
                   id="game-card"
                   className={`w-full bg-skin-card border p-8 rounded-2xl shadow-2xl transform backface-hidden transition-all ${
@@ -1963,8 +2025,14 @@ function App() {
                     </div>
 
                     {/* Center Indicator */}
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-full bg-skin-accent z-20 shadow-[0_0_10px_var(--accent-color)]"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-2 border-skin-accent rounded-xl z-20 shadow-[0_0_20px_var(--accent-color)] opacity-50 pointer-events-none"></div>
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 z-30 filter drop-shadow-lg">
+                      <div
+                        ref={pointerRef}
+                        className="w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[24px] border-t-skin-accent origin-top"
+                      ></div>
+                    </div>
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-0.5 h-full bg-skin-accent/30 z-20"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 border-2 border-skin-accent rounded-xl z-20 shadow-[0_0_20px_var(--accent-color)] opacity-30 pointer-events-none"></div>
 
                     <div
                       ref={rouletteContainerRef}
